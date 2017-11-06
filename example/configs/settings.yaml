@@ -1,0 +1,32 @@
+
+# input_pre_processor input_table_list
+input_table_list:
+  - tablename: sampledata
+    filename: sampledata.csv
+    index_col: id
+    column_map:
+      I: id
+      X: x
+      S: s
+
+run_list:
+  steps:
+    - input_pre_processor
+    - write_tables
+
+  # resume_after:
+
+
+
+# output_tables can specify either a list of output tables to include or to skip
+# if neither is specified, then all checkpointed tables will be written
+#
+#output_tables:
+#  action: skip
+#  tables:
+#    - sampledata
+#
+output_tables:
+  action: include
+  tables:
+    - sampledata
