@@ -1,5 +1,5 @@
 FreightSim
 ==========
 
-python version of Behavioral-based National Freight Demand Model. PopulationSim is
+Python version of Behavioral-based National Freight Demand Model. FreightSim is
 implemented in the [ActivitySim](https://github.com/UDST/activitysim) framework.
