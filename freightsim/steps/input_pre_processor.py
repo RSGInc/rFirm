@@ -24,8 +24,8 @@ def input_pre_processor():
     table_list = setting(table_list_name)
     assert table_list is not None, "table list '%s' not in settings." % table_list_name
 
-    # FIXME - ignoring injectable
-    data_dir = setting('data_dir', 'data')
+    # - allow settings to override injectable
+    data_dir = setting('data_dir', inject.get_injectable('data_dir'))
 
     for table_info in table_list:
 
