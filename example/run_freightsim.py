@@ -11,7 +11,7 @@ from activitysim.core.tracing import print_elapsed_time
 from activitysim.core.config import handle_standard_args
 from activitysim.core.config import setting
 
-from freightsim import steps
+from afreight import steps
 
 handle_standard_args()
 

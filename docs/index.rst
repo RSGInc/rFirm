@@ -1,19 +1,19 @@
-.. FreightSim documentation master file
+.. aFreight documentation master file
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-FreightSim
-==========
+aFreight
+========
 
 Python version of Behavioral-based National Freight Demand Model.
 
-Additional information about the FreightSim development effort is on the
-`GitHub project wiki <https://github.com/rsg/freightsim/wiki>`__.
+Additional information about the aFreight development effort is on the
+`GitHub project wiki <https://github.com/rsg/afreight/wiki>`__.
 
 Software Design
 ---------------
 
-FreightSim is
+aFreight is
 implemented in Python, and makes heavy use of the vectorized backend C/C++ libraries in 
 `pandas <http://pandas.pydata.org>`__  and `numpy <http://numpy.org>`__.  The core design 
 principle of the system is vectorization of for loops, and this principle 
