@@ -12,4 +12,4 @@ aFreight is implemented in the
 
 ## Documentation
 
-https://github.com/RSGInc/afreight/wiki
+https://rsginc.github.io/afreight/
