@@ -14,7 +14,7 @@ logging:
 
   loggers:
 
-    freightsim:
+    afreight:
       level: !!python/name:logging.DEBUG
       handlers: [console, logfile]
       propagate: false

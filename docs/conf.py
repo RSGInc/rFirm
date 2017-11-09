@@ -52,7 +52,7 @@ source_suffix = '.rst'
 master_doc = 'index'
 
 # General information about the project.
-project = u'FreightSim'
+project = u'aFreight'
 copyright = u'contributing authors'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -185,7 +185,7 @@ html_static_path = ['_static']
 # html_file_suffix = None
 
 # Output file base name for HTML help builder.
-htmlhelp_basename = 'FreightSimdoc'
+htmlhelp_basename = 'aFreightdoc'
 
 
 # -- Options for LaTeX output ---------------------------------------------
@@ -205,7 +205,7 @@ latex_elements = {
 # (source start file, target name, title,
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
-  ('index', 'FreightSim.tex', u'FreightSim Documentation',
+  ('index', 'aFreight.tex', u'aFreight Documentation',
    u'contributing authors', 'manual'),
 ]
 
@@ -235,7 +235,7 @@ latex_documents = [
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
 man_pages = [
-    ('index', 'freightsim', u'FreightSim Documentation',
+    ('index', 'afreight', u'aFreight Documentation',
      [u'contributing authors'], 1)
 ]
 
@@ -249,8 +249,9 @@ man_pages = [
 # (source start file, target name, title, author,
 #  dir menu entry, description, category)
 texinfo_documents = [
-  ('index', 'FreightSim', u'FreightSim Documentation',
-   u'contributing authors', 'FreightSim', 'One line description of project.',
+  ('index', 'afreight', u'aFreight Documentation',
+   u'contributing authors', 'aFreight',
+   'Python implementation of Behavioral-Based National Freight Demand Model.',
    'Miscellaneous'),
 ]
 

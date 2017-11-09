@@ -7,13 +7,13 @@ with open('README.rst') as file:
     long_description = file.read()
 
 setup(
-    name='freightsim',
+    name='afreight',
     version='0.1.dev1',
     description='National Freight Model',
     author='contributing authors',
     author_email='jeff.doyle@rsginc.com',
     license='BSD-3',
-    url='https://github.com/RSGInc/freightsim',
+    url='https://github.com/RSGInc/afreight',
     classifiers=[
         'Development Status :: 4 - Beta',
         'Programming Language :: Python :: 2.7',

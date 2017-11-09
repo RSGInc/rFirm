@@ -21,8 +21,8 @@ install:
 - pip --no-cache-dir install https://github.com/RSGInc/activitysim/zipball/master
 - pip install .
 script:
-- pycodestyle freightsim
-- py.test --cov freightsim --cov-report term-missing
+- pycodestyle afreight
+- py.test --cov afreight --cov-report term-missing
 after_success:
 - coveralls
 - bin/build_docs.sh

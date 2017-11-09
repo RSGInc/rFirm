@@ -1,15 +1,15 @@
-FreightSim
-==========
+aFreight
+========
 
 
-[![Build Status](https://travis-ci.org/RSGInc/freightsim.svg?branch=master)](https://travis-ci.org/RSGInc/freightsim) [![Coverage Status](https://coveralls.io/repos/RSGInc/freightsim/badge.png?branch=master)](https://coveralls.io/r/RSGInc/freightsim?branch=master)
+[![Build Status](https://travis-ci.org/RSGInc/afreight.svg?branch=master)](https://travis-ci.org/RSGInc/afreight) [![Coverage Status](https://coveralls.io/repos/RSGInc/afreight/badge.png?branch=master)](https://coveralls.io/r/RSGInc/afreight?branch=master)
 
 
-python version of national freight using activitysim core
+Python implementation of Behavioral-Based National Freight Demand Model.
 
-FreightSim is implemented in the 
+aFreight is implemented in the 
 [ActivitySim](https://github.com/UDST/activitysim) framework. 
 
 ## Documentation
 
-https://github.com/RSGInc/freightsim/wiki
+https://github.com/RSGInc/afreight/wiki
