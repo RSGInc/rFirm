@@ -1,0 +1,40 @@
+
+# input_pre_processor input_table_list
+input_table_list:
+  - tablename: FAF_NUMA
+    filename: corresp_taz_faf4.csv
+    index_col: TAZ
+  - tablename: FIPS_NUMA
+    filename: corresp_taz_fips.csv
+    index_col: TAZ
+    column_map:
+      StateFIPS: state_FIPS
+      CountyFIPS: county_FIPS
+  - tablename: cbp14co
+    filename: cbp14co.txt
+    column_map:
+      fipstate: state_FIPS
+      fipscty: county_FIPS
+
+run_list:
+  steps:
+    - input_pre_processor
+    - firm_synthesis
+    - write_tables
+
+  #resume_after: input_pre_processor
+
+
+
+# output_tables can specify either a list of output tables to include or to skip
+# if neither is specified, then all checkpointed tables will be written
+#
+output_tables:
+  action: skip
+  tables:
+    - cbp14co
+#
+#output_tables:
+#  action: include
+#  tables:
+#    - sampledata

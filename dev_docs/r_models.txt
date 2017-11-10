@@ -1,0 +1,85 @@
+
+# FHWA National Freight Model Model Approach Final.pdf
+
+### 1. Firm Synthesis.................. firm_sim.R
+    Establishment Synthesis
+
+### 2. Simulate Supply Chain.................... sc_sim.R
+    Procurement Market Model
+    Mode Choice Model
+    Shipment Size Model
+    Carrier Choice Model
+
+Transport Chain Model
+Backhauling and Consolidation
+Truck Assignment
+
+
+
+
+# Master.R
+
+### Initialize Application -------------------------------------------------------------------
+
+# Load global variables
+# Load current rFreight installation
+# Check for new rFreight version, load rFreight and other packages, create output folder
+# Load any other scripts of general functions for use in the model
+
+
+### 1. Firm Synthesis ---------------------------- firm_sim.R
+
+  # Enumerate firms
+  # Allocate firms from TAZ1 (large zones) to TAZ2 (small zones) for region with small zones
+  # Scale firms to TAZ1 (large zones) to TAZ2 (small zones)for this scenario
+  # Simulate production commodities
+  # Identify warehouses, producers, and maker sample
+  # Identify input commodities needed for each firm
+	  # FirmInputOutputPairs <- firm_sim_iopairs
+	  # producers <- firm_sim_producers
+	  # consumers <- firm_sim_consumers
+	  # naics_set <- firm_sim_naics_set
+
+
+### 2. Simulate Supply Chain --------------------- sc_sim.R
+
+    # Process network skims into a set of mode choice model inputs describing modal travel times and distances
+    ShipmentRoutes <- sc_sim_traveltimedistance
+
+    # Calculate model costs and times for each shipment route - mode combination
+    ShipmentRoutesCosts <- sc_sim_modalcosts
+
+    # Create groups of producers and consumers
+    AllFirms <- sc_sim_pmg(naics_set, ShipmentRoutesCosts = ShipmentRoutesCosts)
+
+    # Select supplier firms for consuming firms
+    BuyerSupplierPairs <- sc_sim_supplierselection
+
+    # Apportion freight flows to buyer supplier pairs and weight to FAF data
+    BuyerSupplierFlows <- sc_sim_apportionment
+
+    # Determine distribution channel
+    BuyerSupplierChannel <- sc_sim_distchannel
+
+    # Determine shipment size
+    BuyerSupplierShipmentSize <- sc_sim_shipmentsize
+
+    # Mode choice
+    # Process network skims into a set of mode choice model inputs describing modal travel times and distances
+    ShipmentRoutes <- sc_sim_traveltimedistance
+
+    # Calculate model costs and times for each shipment route - mode combination
+    ShipmentRoutesCosts <- sc_sim_modalcosts
+
+    # Determine Shipment mode
+    BuyerSupplierMode <- sc_sim_shipmentmode
+
+    # Complete shipment table with intermediate transfer locations added
+    BuyerSupplierModeTransfer <- sc_sim_transferlocations
+
+    # Add through trips to and from Import/Export nodes in the region
+    InternationalThru <- sc_sim_internationalthru
+
+    # Convert shipments to trips for aggregate assignment and for sampling for truck touring simulation
+    ShipmentTripList <- sc_sim_trips
+

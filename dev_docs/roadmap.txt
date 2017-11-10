@@ -1,0 +1,16 @@
+RSGInc/national_freight
+
+RSGInc/rFreight
+
+
+rFreight createAppTemplate makes this:
+    run_model.R
+    dev/
+    lib/
+    lib/data/
+    lib/scripts/
+    lib/scripts/Master.R
+    lib/templates/
+    scenarios/
+    scenarios/base/
+    scenarios/base/inputs/
