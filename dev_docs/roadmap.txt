@@ -1,3 +1,15 @@
+
+
+cbp14co.txt
+    downloaded from ftp://ftp.census.gov/econ2014/CBP_CSV/cbp14co.zip
+
+corresp_taz_faf4.csv
+corresp_taz_fips.csv
+    from RSGInc/national_freight repo
+    RSGInc/national_freight/dev/data/corresp_taz_fips.csv
+    RSGInc/national_freight/dev/data/corresp_taz_faf4.csv
+
+
 RSGInc/national_freight
 
 RSGInc/rFreight

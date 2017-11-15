@@ -1,13 +1,56 @@
 
-# input_pre_processor input_table_list
-input_table_list:
-  - tablename: sampledata
-    filename: sampledata.csv
-    index_col: id
+
+# input_pre_processor input_tables
+input_tables:
+
+  corresp_taz_faf4:
+    filename: corresp_taz_faf4.csv
+    index_col: TAZ
+
+  corresp_taz_fips:
+    filename: corresp_taz_fips.csv
+    index_col: TAZ
     column_map:
-      I: id
-      X: x
-      S: s
+      StateFIPS: state_FIPS
+      CountyFIPS: county_FIPS
+
+  cbp:
+    filename: cbp14co.txt
+    column_map:
+      fipstate: state_FIPS
+      fipscty: county_FIPS
+
+  NAICS_to_NAICSio:
+    filename: NAICS2007_to_NAICS2007io.csv
+    index_col: NAICS
+
+  # convert NAICSio to Standard Classification of Transported Goods (SCTG)
+  NAICSio_to_SCTG:
+    filename: NAICS2007io_to_SCTG.csv
+    index_col: NAICSio
+
+  # labels for 2,3,4,5, and 6 digit NAICS codes
+  NAICS2007_labels:
+    filename: NAICS2007.csv
+
+  # 2014 SUSB Annual Data Tables by Establishment Industry
+  SUSB_firms:
+    filename: SUSB_Firms.csv
+    column_map:
+      naics: NAICS
+    index_col: NAICS
+
+  # County_to_FAFZone from RSGFAF
+  FIPS_to_FAFZone:
+    filename: County_to_FAFZone.csv
+    column_map:
+      StateFIPS: state_FIPS
+      CountyFIPS: county_FIPS
+      State: state
+      FAFZone_4.1: FAFZone_4_1
+      FAFZone_4.2: FAFZone_4_2
+      FAFZone_4.3: FAFZone_4_3
+    index_col: FIPS
 
 run_list:
   steps:
@@ -26,7 +69,7 @@ run_list:
 #  tables:
 #    - sampledata
 #
-output_tables:
-  action: include
-  tables:
-    - sampledata
+#output_tables:
+#  action: include
+#  tables:
+#    - sampledata
