@@ -18,7 +18,6 @@ from activitysim.core.tracing import print_elapsed_time
 
 from activitysim.core.config import setting
 from activitysim.core.util import reindex
-#from activitysim.core.util import quick_loc_df
 
 from afreight.util import read_table
 from afreight.util import bucket_round
@@ -47,7 +46,8 @@ def firm_sim_load_firms(NAICS2012_to_NAICS2007):
     assert firms[is_naics_2012].naics.isin(NAICS2012_to_NAICS2007.NAICS2012).all()
 
     unique_naics2012 = firms.naics[is_naics_2012].unique()
-    map_2012_to_2007 = NAICS2012_to_NAICS2007[ NAICS2012_to_NAICS2007.NAICS2012.isin(unique_naics2012) ]
+    map_2012_to_2007 = \
+        NAICS2012_to_NAICS2007[NAICS2012_to_NAICS2007.NAICS2012.isin(unique_naics2012)]
     # prune many-to-one
     map_2012_to_2007 = map_2012_to_2007[~map_2012_to_2007.NAICS2012.duplicated()]
     map_2012_to_2007 = map_2012_to_2007.set_index('NAICS2012').NAICS2007
@@ -90,11 +90,9 @@ def firm_sim_enumerate(
     assert ~firms.n2.isnull().any()
 
     # - recode esizecat map from str employment_categories.esizecat to int employment_categories.id
-    # Firms[, esizecat: = factor(esizecat, levels=paste0("e", 1:12), ordered = TRUE, labels = EmploymentCategories$Label)]
     firms['esizecat'] = reindex(employment_categories.set_index('esizecat').id, firms.esizecat)
 
     # - Add 10 level industry classification
-    # Firms[c_naics_industry[,.(n3=NAICS3, Industry10=industry)], Industry10:= i.Industry10, on = "n3"]
     firms['industry10'] = reindex(naics_industry.industry, firms.n3).astype(str)
 
     if firms.industry10.isnull().any():
@@ -129,7 +127,6 @@ def scale_cbp_to_se(employment, firms):
 
     employment['adjustment'] = employment.emp_SE / employment.emp_CBP
     employment.adjustment.replace(np.inf, np.nan, inplace=True)
-    #assert not employment.adjustment.isnull().any()
 
     # add adjustment factor for each firm based on its TAZ and model_emp_cat
     on_cols = ['TAZ', 'model_emp_cat']
@@ -177,18 +174,22 @@ def firm_sim_scale_employees(
     assert set(model_emp_cats).issubset(set(socio_economics_taz.columns.values))
 
     # just want those columns plus TAZ so we can melt
-    socio_economics_taz = socio_economics_taz[ model_emp_cats]
+    socio_economics_taz = socio_economics_taz[model_emp_cats]
 
     # columns that firm_sim_scale_employees_taz (allegedly) expects in firms
-    region_firm_cols = ['TAZ', 'county_FIPS', 'state_FIPS', 'FAF4', 'naics', 'n4', 'n3', 'n2', 'NAICS6_make', 'industry10', 'industry5', 'model_emp_cat', 'esizecat', 'emp']
+    region_firm_cols = \
+        ['TAZ', 'county_FIPS', 'state_FIPS', 'FAF4', 'naics', 'n4', 'n3', 'n2',
+         'NAICS6_make', 'industry10', 'industry5', 'model_emp_cat', 'esizecat', 'emp']
     firms = firms[region_firm_cols]
 
     # - Compare employment between socio-economic input (SE) and synthetized firms (CBP)
 
     # Summarize employment of synthesized firms by TAZ and Model_EmpCat
-    employment = firms.groupby(['TAZ', 'model_emp_cat'])['emp'].sum().to_frame(name='emp_CBP').reset_index()
+    employment = firms.groupby(['TAZ', 'model_emp_cat'])['emp'].sum()
+    employment = employment.to_frame(name='emp_CBP').reset_index()
     # Melt socio_economics_taz employment data by TAZ and employment category
-    employment_SE = socio_economics_taz.reset_index().melt(id_vars='TAZ', var_name='model_emp_cat', value_name='emp_SE')
+    employment_SE = socio_economics_taz.reset_index().\
+        melt(id_vars='TAZ', var_name='model_emp_cat', value_name='emp_SE')
     # inner join
     employment = employment.merge(right=employment_SE, how='outer', on=['TAZ', 'model_emp_cat'])
 
@@ -205,14 +206,14 @@ def firm_sim_scale_employees(
     #
     # Note: if difference is 0, no action required --> Adjustment factor will be 1:
 
-    # - Case 1 and 3: we simply scale the number of employees without creating any firms
+    # - Case 1 and 3: scale the number of employees without creating any firms
     firms = scale_cbp_to_se(employment, firms)
 
-    # - Case 2: we create new n new firms where n is employees_needed / avg_number_employees_per_firm
+    # - Case 2: create new n new firms where n is employees_needed / avg_number_employees_per_firm
 
     # - Add firms to empty TAZ-Employment category combinations to deal with Case 2
     # For each combination:
-    # 1. Select a number of firms max of 1 and EMPDIFF/average emp from all of the firms in that Model_EmpCat
+    # 1. Select a number of firms max of EMPDIFF/average emp from all firms in that Model_EmpCat
     # 2. Add them to the firms table
     # 3. recalc the EMPADJ to refine the employment to match exactly the SE data employment
 
@@ -277,13 +278,16 @@ def firm_sim_scale_employees(
     new_firms.index = new_firms.index + firms.index.max() + 1
     new_firms.index.name = firms.index.name
 
-    # - Check that the employee counts of the new firms matches the SE data and scale/bucket round as needed
+    # - scale/bucket round to ensure that employee counts of the new firms matche the SE data
     # Summarize employment of new firms by TAZ and Model_EmpCat
-    employment_new = new_firms.groupby(['TAZ', 'model_emp_cat'])['emp'].sum().to_frame(name='emp_CBP').reset_index()
+    employment_new = new_firms.groupby(['TAZ', 'model_emp_cat'])['emp'].sum()
+    employment_new = employment_new.to_frame(name='emp_CBP').reset_index()
     # Melt socio_economics_taz employment data by TAZ and employment category
-    employment_SE = socio_economics_taz.reset_index().melt(id_vars='TAZ', var_name='model_emp_cat', value_name='emp_SE')
+    employment_SE = socio_economics_taz.reset_index().\
+        melt(id_vars='TAZ', var_name='model_emp_cat', value_name='emp_SE')
     # left join since we only care about new firms
-    employment_new = employment_new.merge(right=employment_SE, how='left', on=['TAZ', 'model_emp_cat'])
+    employment_new = \
+        employment_new.merge(right=employment_SE, how='left', on=['TAZ', 'model_emp_cat'])
 
     assert not employment_new.emp_SE.isnull().any()
     assert not employment_new.emp_CBP.isnull().any()
@@ -296,13 +300,12 @@ def firm_sim_scale_employees(
         n_created = (new_firms.model_emp_cat == emp_cat).sum()
 
         if n_needed != n_created:
-            #assert emp_cat in emp_cats_absent_from_cbp
             logger.warn("model_emp_cat %s needed %s, created %s" % (emp_cat, n_needed, n_created))
 
     # Combine the original firms and the new firms
     firms = pd.concat([firms, new_firms])
 
-    assert not (firms.emp<1).any()
+    assert not (firms.emp < 1).any()
 
     # Recode employee counts into categories
     firms['esizecat'] = \
@@ -347,7 +350,7 @@ def firm_sim_simulate_production_commodities(
     for naics, naics_firms in multi_sctg_firms.groupby('NAICS6_make'):
 
         # slice the NAICS2007io_to_SCTG rows for this naics
-        naics_sctgs = multi_NAICS2007io_to_SCTG[ multi_NAICS2007io_to_SCTG.NAICSio == naics]
+        naics_sctgs = multi_NAICS2007io_to_SCTG[multi_NAICS2007io_to_SCTG.NAICSio == naics]
 
         # choose a random SCTG code for each business with this naics code
         sctgs = np.random.choice(naics_sctgs.SCTG.values,
@@ -359,7 +362,8 @@ def firm_sim_simulate_production_commodities(
 
     t0 = print_elapsed_time("choose SCTG for multi-SCTG naics", t0, debug=True)
 
-    KeyMap = collections.namedtuple('KeyMap', ['key_col', 'key_value', 'target', 'target_values', 'probs'])
+    KeyMap = collections.namedtuple('KeyMap',
+                                    ['key_col', 'key_value', 'target', 'target_values', 'probs'])
 
     def assign_keymap(keymap, df):
         flag_rows = (df[keymap.key_col] == keymap.key_value)
@@ -370,33 +374,33 @@ def firm_sim_simulate_production_commodities(
             df.loc[flag_rows, keymap.target] = \
                 np.random.choice(keymap.target_values, size=flag_rows.sum(), p=keymap.probs)
 
-    # # Identify firms who make 2+ commodities (especially wholesalers) and
-    # # simulate a specific commodity for them based on probability thresholds for multiple commodities
+    # Identify firms who make 2+ commodities (especially wholesalers) and simulate a specific
+    # commodity for them based on probability thresholds for multiple commodities
     keymaps = [
-        # TODO: are these still appropriate correspodences given the I/O data for the current project?
-        KeyMap('naics', 211111, 'SCTG', (16L, 19L)     , (.45, .55)     ),  # Crude Petroleum and Natural Gas Extraction: Crude petroleum; Coal and petroleum products, n.e.c.
-        KeyMap('naics', 324110, 'SCTG', (17L, 18L, 19L), (.25, .25, .50)),  # Petroleum Refineries: Gasoline and aviation turbine fuel; Fuel oils; Coal and petroleum products, n.e.c.
+        # TODO: are these the right correspodences given the I/O data for the current project?
+        KeyMap('naics', 211111, 'SCTG', (16L, 19L),      (.45, .55)),       # Crude Petroleum and Natural Gas Extraction: Crude petroleum; Coal and petroleum products, n.e.c.            # nopep8
+        KeyMap('naics', 324110, 'SCTG', (17L, 18L, 19L), (.25, .25, .50)),  # Petroleum Refineries: Gasoline and aviation turbine fuel; Fuel oils; Coal and petroleum products, n.e.c.    # nopep8
+                                                                                                                                                                                          # nopep8
+        KeyMap('n4', 4233, 'SCTG', (10L, 11L, 12L, 25L, 26L), (0.10, 0.10, 0.60, 0.10, 0.10)),  # Lumber and Other Construction Materials Merchant Wholesalers                            # nopep8
+        KeyMap('n4', 4235, 'SCTG', (13L, 14L, 31L, 32L), (0.25, 0.25, 0.25, 0.25)),             # Metal and Mineral (except Petroleum) Merchant Wholesalers                               # nopep8
+        KeyMap('n4', 4247, 'SCTG', (16L, 17L, 18L, 19L), (0.25, 0.25, 0.25, 0.25)),             # Petroleum and Petroleum Products Merchant Wholesalers                                   # nopep8
+        KeyMap('n4', 4246, 'SCTG', (20L, 21L, 22L, 23L), (0.25, 0.25, 0.25, 0.25)),             # Chemical and Allied Products Merchant Wholesalers                                       # nopep8
+        KeyMap('n4', 4245, 'SCTG', (1L,  2L,  3L,  4L), (0.25, 0.25, 0.25, 0.25)),              # Farm Product Raw Material Merchant Wholesalers                                          # nopep8
+        KeyMap('n4', 4244, 'SCTG', (5L,  6L,  7L,  9L), (0.25, 0.25, 0.25, 0.25)),              # Grocery and Related Product Wholesalers                                                 # nopep8
+        KeyMap('n4', 4241, 'SCTG', (27L, 28L, 29L), (0.33, 0.33, 0.34)),                        # Paper and Paper Product Merchant Wholesalers                                            # nopep8
+        KeyMap('n4', 4237, 'SCTG', (15L, 33L), (0.50, 0.50)),                                   # Hardware, and Plumbing and Heating Equipment and Supplies Merchant Wholesalers          # nopep8
+        KeyMap('n4', 4251, 'SCTG', (35L, 38L), (0.50, 0.50)),                                   # Wholesale Electronic Markets and Agents and Brokers                                     # nopep8
+        KeyMap('n4', 4236, 'SCTG', (35L, 38L), (0.50, 0.50)),                                   # Electrical and Electronic Goods Merchant Wholesalers                                    # nopep8
+        KeyMap('n4', 4231, 'SCTG', (36L, 37L), (0.50, 0.50)),                                   # Motor Vehicle and Motor Vehicle Parts and Supplies Merchant Wholesalers                 # nopep8
 
-        KeyMap('n4', 4233, 'SCTG', (10L, 11L, 12L, 25L, 26L), (0.10, 0.10, 0.60, 0.10, 0.10)),  # Lumber and Other Construction Materials Merchant Wholesalers
-        KeyMap('n4', 4235, 'SCTG', (13L, 14L, 31L, 32L)     , (0.25, 0.25, 0.25, 0.25      )),  # Metal and Mineral (except Petroleum) Merchant Wholesalers
-        KeyMap('n4', 4247, 'SCTG', (16L, 17L, 18L, 19L)     , (0.25, 0.25, 0.25, 0.25      )),  # Petroleum and Petroleum Products Merchant Wholesalers
-        KeyMap('n4', 4246, 'SCTG', (20L, 21L, 22L, 23L)     , (0.25, 0.25, 0.25, 0.25      )),  # Chemical and Allied Products Merchant Wholesalers
-        KeyMap('n4', 4245, 'SCTG', (1L,  2L,  3L,  4L)      , (0.25, 0.25, 0.25, 0.25      )),  # Farm Product Raw Material Merchant Wholesalers
-        KeyMap('n4', 4244, 'SCTG', (5L,  6L,  7L,  9L)      , (0.25, 0.25, 0.25, 0.25      )),  # Grocery and Related Product Wholesalers
-        KeyMap('n4', 4241, 'SCTG', (27L, 28L, 29L)          , (0.33, 0.33, 0.34            )),  # Paper and Paper Product Merchant Wholesalers
-        KeyMap('n4', 4237, 'SCTG', (15L, 33L)               , (0.50, 0.50,                 )),  # Hardware, and Plumbing and Heating Equipment and Supplies Merchant Wholesalers
-        KeyMap('n4', 4251, 'SCTG', (35L, 38L)               , (0.50, 0.50,                 )),  # Wholesale Electronic Markets and Agents and Brokers
-        KeyMap('n4', 4236, 'SCTG', (35L, 38L)               , (0.50, 0.50,                 )),  # Electrical and Electronic Goods Merchant Wholesalers
-        KeyMap('n4', 4231, 'SCTG', (36L, 37L)               , (0.50, 0.50,                 )),  # Motor Vehicle and Motor Vehicle Parts and Supplies Merchant Wholesalers
-
-        KeyMap('n4', 4248, 'SCTG', 8L , 1),  # Beer, Wine, and Distilled Alcoholic Beverage Merchant Wholesalers
-        KeyMap('n4', 4242, 'SCTG', 21L, 1),  # Drugs and Druggists Sundries Merchant Wholesalers
-        KeyMap('n4', 4234, 'SCTG', 24L, 1),  # Professional and Commercial Equipment and Supplies Merchant Wholesalers
-        KeyMap('n4', 4243, 'SCTG', 30L, 1),  # Apparel, Piece Goods, and Notions Merchant Wholesalers
-        KeyMap('n4', 4238, 'SCTG', 34L, 1),  # Machinery, Equipment, and Supplies Merchant Wholesalers
-        KeyMap('n4', 4232, 'SCTG', 39L, 1),  # Furniture and Home Furnishing Merchant Wholesalers
-        KeyMap('n4', 4239, 'SCTG', 40L, 1),  # Miscellaneous Durable Goods Merchant Wholesalers
-        KeyMap('n4', 4249, 'SCTG', 40L, 1),  # Miscellaneous Nondurable Goods Merchant Wholesalers
+        KeyMap('n4', 4248, 'SCTG',  8L, 1),  # Beer, Wine, and Distilled Alcoholic Beverage Merchant Wholesalers         # nopep8
+        KeyMap('n4', 4242, 'SCTG', 21L, 1),  # Drugs and Druggists Sundries Merchant Wholesalers                         # nopep8
+        KeyMap('n4', 4234, 'SCTG', 24L, 1),  # Professional and Commercial Equipment and Supplies Merchant Wholesalers   # nopep8
+        KeyMap('n4', 4243, 'SCTG', 30L, 1),  # Apparel, Piece Goods, and Notions Merchant Wholesalers                    # nopep8
+        KeyMap('n4', 4238, 'SCTG', 34L, 1),  # Machinery, Equipment, and Supplies Merchant Wholesalers                   # nopep8
+        KeyMap('n4', 4232, 'SCTG', 39L, 1),  # Furniture and Home Furnishing Merchant Wholesalers                        # nopep8
+        KeyMap('n4', 4239, 'SCTG', 40L, 1),  # Miscellaneous Durable Goods Merchant Wholesalers                          # nopep8
+        KeyMap('n4', 4249, 'SCTG', 40L, 1),  # Miscellaneous Nondurable Goods Merchant Wholesalers                       # nopep8
     ]
 
     for keymap in keymaps:
@@ -404,8 +408,6 @@ def firm_sim_simulate_production_commodities(
 
     # all n2=43 firms get NAICS6_Make padded n4 (e.g. 4248 gets NAICS6_Make '424800')
     firms.NAICS6_make = firms.NAICS6_make.mask(firms.n2 == 42, (firms.n4 * 100).astype(str))
-
-    #print firms[firms.n2==42][['naics', 'SCTG', 'NAICS6_make']]
 
     assert firms.index.is_unique
     return firms
@@ -420,14 +422,18 @@ def firm_sim_types(firms):
 
     # Warehouses
     # NAICS 481 air, 482 rail, 483 water, 493 warehouse and storage
-    firms['warehouse'] = firms.TAZ.isin(base_variables.BASE_TAZ1_HALO_STATES) & (firms.n3.isin(base_variables.NAICS3_WAREHOUSE))
+    firms['warehouse'] = \
+        firms.TAZ.isin(base_variables.BASE_TAZ1_HALO_STATES) & \
+        (firms.n3.isin(base_variables.NAICS3_WAREHOUSE))
 
     # Producers and Makers
-    # Create a flag to make sure at least one firm is used as a maker for each zone and commodity combination
+    # Create a flag to make sure at least one firm is used
+    # as a maker for each zone and commodity combination
     producers = firms[~firms.SCTG.isnull()].copy()
 
     g = ['TAZ', 'FAF4', 'NAICS6_make', 'SCTG']
-    keeper_ids = producers[g].groupby(g).agg(lambda x: np.random.choice(x.index, size=1)[0]).values
+    keeper_ids = \
+        producers[g].groupby(g).agg(lambda x: np.random.choice(x.index, size=1)[0]).values
     producers['must_keep'] = False
     producers.loc[keeper_ids, 'must_keep'] = True
 
@@ -451,32 +457,36 @@ def firm_sim_types(firms):
     firms['maker'] = False
     firms.loc[makers.index, 'maker'] = True
 
-    logger.info('%s firms, %s producers, %s makers' % (firms.shape[0], firms.maker.sum(), firms.producer.sum()))
+    logger.info('%s firms, %s producers, %s makers' %
+                (firms.shape[0], firms.maker.sum(), firms.producer.sum()))
 
     return firms
 
 
-def firm_sim_iopairs(firms, input_output_values, NAICS2007io_to_SCTG):
+def firm_sim_iopairs(firms, io_values, NAICS2007io_to_SCTG):
     """
     Sample producer and consumer firms to create buyer-supplier pairings
     """
 
     t0 = print_elapsed_time()
 
-    # input_output_values.NAICS6_make = NAICS6_input - item required to make NAICS6_use
-    # input_output_values.NAICS6_use = NAICS6_output
+    # io_values.NAICS6_make = input commodity required to make NAICS6_use
+    # io_values.NAICS6_use = output commodity uses io_values.NAICS6_make as an input
+    # producers.NAICS6_make - the commodity the producer produces
 
     # Identify consumer firms
-    firm_sample = firms[['TAZ', 'county_FIPS', 'state_FIPS', 'FAF4', 'NAICS6_make', 'esizecat', 'emp']].copy()
+    cols = ['TAZ', 'county_FIPS', 'state_FIPS', 'FAF4', 'NAICS6_make', 'esizecat', 'emp']
+    firm_sample = firms[cols].copy()
     firm_sample.reset_index(inplace=True)  # bus_id index as explicit column
 
     t0 = print_elapsed_time("firm_sim_iopairs cols", t0, debug=True)
 
-    # Create a flag to make sure at least one firm is sampled for each zone and PRODUCED commodity combination
+    # Create a flag to make sure at least one firm is sampled
+    # for each zone and PRODUCED commodity combination
 
     g = ['TAZ', 'FAF4', 'NAICS6_make', 'esizecat']
-    #fn = lambda obj: obj.loc[np.random.choice(obj.index, size, replace), :]
-    keeper_ids = firm_sample[g].groupby(g).agg(lambda x: np.random.choice(x.index, size=1)[0]).values
+    keeper_ids = \
+        firm_sample[g].groupby(g).agg(lambda x: np.random.choice(x.index, size=1)[0]).values
     t0 = print_elapsed_time("keeper_ids", t0, debug=True)
 
     firm_sample['must_keep'] = False
@@ -493,8 +503,7 @@ def firm_sim_iopairs(firms, input_output_values, NAICS2007io_to_SCTG):
 
     temp_rand = np.random.rand(firm_sample.shape[0])
 
-    # Consumers[temprand > 0.95 | TAZ1 %in% BASE_TAZ1_HALO_STATES  | as.integer(esizecat) >= 5 | MustKeep == 1]
-    consumer_firm_sample = firm_sample[
+    firm_sample = firm_sample[
         firm_sample.TAZ.isin(base_variables.BASE_TAZ1_HALO_STATES) |
         (firm_sample.esizecat >= 5) |
         firm_sample.must_keep |
@@ -507,40 +516,43 @@ def firm_sim_iopairs(firms, input_output_values, NAICS2007io_to_SCTG):
 
     # For each consuming firm generate a list of input commodities that need to be purchased
     # Filter to just transported commodities
-    # FIXME filters so input_output_values only contains producer NAICS6_make
-    # FIXME but nothing guarantees that the input_output_values NAICS6_use have any domestic producers
-    #InputOutputValues < - InputOutputValues[NAICS6_Make % in % unique(Firms[Producer == 1, NAICS6_Make])]
+    # FIXME filters so io_values only contains producer NAICS6_make
+    # FIXME but nothing guarantees that the io_values NAICS6_use have any domestic producers
     producer_naics = firms.NAICS6_make[firms.producer].unique()
-    input_output_values = input_output_values[ input_output_values.NAICS6_make.isin(producer_naics) ]
+    io_values = io_values[io_values.NAICS6_make.isin(producer_naics)]
 
     # - Calculate cumulative pct value of the consumption inputs
-    input_output_values = input_output_values.sort_values(by=['NAICS6_use', 'pro_val'])
-    input_output_values['cum_pro_val'] = input_output_values.groupby('NAICS6_use')['pro_val'].transform('cumsum')
-    input_output_values['cum_pct_pro_val'] = input_output_values['cum_pro_val'] / input_output_values.groupby('NAICS6_use')['cum_pro_val'].transform('last')
+    io_values = io_values.sort_values(by=['NAICS6_use', 'pro_val'])
+    io_values['cum_pro_val'] = \
+        io_values.groupby('NAICS6_use')['pro_val'].transform('cumsum')
+    io_values['cum_pct_pro_val'] = \
+        io_values['cum_pro_val'] / io_values.groupby('NAICS6_use')['cum_pro_val'].transform('last')
 
     # Select suppliers including the first above the threshold value
-    # FIXME filter tp select input_output_values with highest pro_val for NAICS6_use
-    input_output_values = input_output_values[ input_output_values.cum_pct_pro_val > (1 - base_variables.BASE_PROVALTHRESHOLD)]
+    # FIXME filter tp select io_values with highest pro_val for NAICS6_use
+    io_values = io_values[io_values.cum_pct_pro_val > (1 - base_variables.BASE_PROVALTHRESHOLD)]
 
     # FIXME - use factors?
     # InputOutputValues[,NAICS6_Make:=factor(NAICS6_Make,levels = levels(Firms$NAICS6_Make))]
     # InputOutputValues[,NAICS6_Use:=factor(NAICS6_Use,levels = levels(Firms$NAICS6_Make))]
 
     # - Calcuate value per employee required (US domestic employment) for each NAICS6_make code
-    domestic_emp_counts_by_naics = firms[ ~firms.state_FIPS.isnull() ][['NAICS6_make', 'emp']].groupby('NAICS6_make')['emp'].sum()
+    domestic_emp_counts_by_naics = \
+        firms[~firms.state_FIPS.isnull()][['NAICS6_make', 'emp']].\
+        groupby('NAICS6_make')['emp'].sum()
 
-    # - drop input_output_values rows where there are no domestic producers of the output commodity
-    input_output_values = input_output_values[ input_output_values.NAICS6_use.isin(domestic_emp_counts_by_naics.index) ]
+    # - drop io_values rows where there are no domestic producers of the output commodity
+    io_values = io_values[io_values.NAICS6_use.isin(domestic_emp_counts_by_naics.index)]
 
     # - annotate input_output_values with total emp count for producers of NAICS_output
-    input_output_values['emp'] = reindex(domestic_emp_counts_by_naics, input_output_values.NAICS6_use)
-    input_output_values['val_emp'] = input_output_values.pro_val / input_output_values.emp
+    io_values['emp'] = reindex(domestic_emp_counts_by_naics, io_values.NAICS6_use)
+    io_values['val_emp'] = io_values.pro_val / io_values.emp
 
-    t0 = print_elapsed_time("firm_sim_iopairs input_output_values", t0, debug=True)
+    t0 = print_elapsed_time("firm_sim_iopairs io_values", t0, debug=True)
 
     # there are firms with no inputs (e.g. wholesalers)
     # but we might want to keep an eye on them, as they will get dropped in merge
-    # output_NAICS = input_output_values.NAICS6_use.unique()
+    # output_NAICS = io_values.NAICS6_use.unique()
     # firms_NAICS6_make = firms.NAICS6_make.unique()
     # naics_without_inputs = list(set(firms_NAICS6_make) - set(output_NAICS))
     # logger.info("%s NAICS_make without input commodities %s" %
@@ -552,7 +564,7 @@ def firm_sim_iopairs(firms, input_output_values, NAICS2007io_to_SCTG):
     # pairs.NAICS6_use is the commodity the firm PRODUCES
     # pairs.NAICS6_make is a commodity that the firm CONSUMES
     pairs = pd.merge(left=firm_sample.rename(columns={'NAICS6_make': 'NAICS6_use'}),
-                     right=input_output_values[['NAICS6_use', 'NAICS6_make', 'val_emp']],
+                     right=io_values[['NAICS6_use', 'NAICS6_make', 'val_emp']],
                      left_on='NAICS6_use', right_on='NAICS6_use', how='inner')
 
     assert not pairs.val_emp.isnull().any()
@@ -591,17 +603,16 @@ def firm_sim_iopairs(firms, input_output_values, NAICS2007io_to_SCTG):
         naics_sctgs = multi_NAICS2007io_to_SCTG[multi_NAICS2007io_to_SCTG.NAICSio == naics]
 
         # choose a random SCTG code for each business with this naics code
-        sctgs.append( np.random.choice(naics_sctgs.SCTG.values,
-                                       size=len(naics_firms),
-                                       p=naics_sctgs.proportion.values,
-                                       replace=True))
+        sctgs.append(np.random.choice(naics_sctgs.SCTG.values,
+                                      size=len(naics_firms),
+                                      p=naics_sctgs.proportion.values,
+                                      replace=True))
 
         bus_ids.append(naics_firms.index.values)
 
     t0 = print_elapsed_time("firm_sim_iopairs choose SCTG for multi-SCTG naics", t0, debug=True)
 
-
-    #singletons
+    # singletons
     sctgs.append(singletons.values)
     bus_ids.append(singletons.index.values)
     sctgs = list(itertools.chain.from_iterable(sctgs))
@@ -614,16 +625,18 @@ def firm_sim_iopairs(firms, input_output_values, NAICS2007io_to_SCTG):
     pairs['SCTG'] = sctgs
     t0 = print_elapsed_time("firm_sim_iopairs pairs['SCTG']", t0, debug=True)
 
-    assert  sum(pairs['SCTG'].isnull()) == 0
+    assert sum(pairs['SCTG'].isnull()) == 0
 
-    # - tweaks
+    # FIXME - move this tweaks to a data file
 
     # Account for multiple SCTGs produced by certain naics codes (i.e. 211111 and 324110)
     i = (pairs.NAICS6_make == "211000") & (pairs.SCTG == 16)
-    pairs.loc[i, 'SCTG'] = np.random.choice([16, 19], size=sum(i), p=[0.45, 0.55], replace=True)
+    pairs.loc[i, 'SCTG'] = \
+        np.random.choice([16, 19], p=[0.45, 0.55], size=sum(i), replace=True)
 
     i = (pairs.NAICS6_make == "324110")
-    pairs.loc[i, 'SCTG'] = np.random.choice([17, 18, 19], size=sum(i), p=[0.25, 0.5, 0.25], replace=True)
+    pairs.loc[i, 'SCTG'] = \
+        np.random.choice([17, 18, 19], p=[0.25, 0.5, 0.25], size=sum(i), replace=True)
 
     # Assume a small chance that a consumer works with a wholesaler instead of a direct shipper for
     # a given shipment/commodity. Mutate some suppliers to wholesaler NAICS.
@@ -632,20 +645,21 @@ def firm_sim_iopairs(firms, input_output_values, NAICS2007io_to_SCTG):
     temp_rand = np.random.rand(pairs.shape[0])
 
     # Pairs[NAICS6_Use2 != "42" & temprand < 0.30 & SCTG < 41,     NAICS6_Make := sctg_whl[SCTG]]
-    sctg_whl = np.array([0,  # padding
+    sctg_whl = np.array([
+        0,  # padding
         424500, 424500, 424500, 424500, 424400, 424400, 424400, 424800, 424400, 423300,
         423300, 423300, 423500, 423500, 423700, 424700, 424700, 424700, 424700, 424600,
         424200, 424600, 424600, 423400, 423300, 423300, 424100, 424100, 424100, 424300,
         423500, 423500, 423700, 423800, 425100, 423100, 423100, 425100, 423200, 423900])
     i = (pairs_NAICS6_use2 != '42') & (pairs.SCTG < 41) & (temp_rand < 0.3)
-    pairs.loc[i, 'NAICS6_make'] = sctg_whl[ pairs.SCTG[i]].astype(str)
+    pairs.loc[i, 'NAICS6_make'] = sctg_whl[pairs.SCTG[i]].astype(str)
 
     # Pairs[NAICS6_Use2 != "42" & temprand < 0.15 & SCTG %in% c(35, 38), NAICS6_Make := "423600"]
-    i = (pairs_NAICS6_use2 != '42') & (pairs.SCTG < 41)  & (temp_rand < 0.15)
+    i = (pairs_NAICS6_use2 != '42') & (pairs.SCTG < 41) & (temp_rand < 0.15)
     pairs.loc[i, 'NAICS6_make'] = '423600'
 
     # Pairs[NAICS6_Use2 != "42" & temprand < 0.15 & SCTG == 40,          NAICS6_Make := "424900"]
-    i = (pairs_NAICS6_use2 != '42') & (pairs.SCTG == 40)  & (temp_rand < 0.15)
+    i = (pairs_NAICS6_use2 != '42') & (pairs.SCTG == 40) & (temp_rand < 0.15)
     pairs.loc[i, 'NAICS6_make'] = '424900'
 
     t0 = print_elapsed_time("firm_sim_iopairs tweaks", t0, debug=True)
@@ -654,7 +668,6 @@ def firm_sim_iopairs(firms, input_output_values, NAICS2007io_to_SCTG):
     # Accounting for multiple SCTGs from one NAICS and for wholesalers means that certain
     # users now have multiple identical inputs on a NAICS6_Make - SCTG basis
     # aggregate (summing over ValEmp) so that NAICS6_MAke - SCTG is unique for each user
-    # Pairs <- Pairs[, .(ValEmp = sum(ValEmp)), by = .(BusID, NAICS6_Make, SCTG, NAICS6_Use, TAZ1, FAF4, esizecat)]
 
     by_cols = ['bus_id', 'NAICS6_make', 'SCTG', 'NAICS6_use', 'TAZ', 'FAF4', 'esizecat']
     pairs = pairs.groupby(by_cols)['val_emp'].sum().to_frame(name='val_emp').reset_index()
@@ -663,7 +676,8 @@ def firm_sim_iopairs(firms, input_output_values, NAICS2007io_to_SCTG):
 
     return pairs
 
-def firm_sim_producers(firms, input_output_values, unitcost):
+
+def firm_sim_producers(firms, io_values, unitcost):
     """
     Create Producers
 
@@ -691,43 +705,47 @@ def firm_sim_producers(firms, input_output_values, unitcost):
     t0 = print_elapsed_time()
 
     # producers.NAICS6_make - the commodity the producer produces
-    # input_output_values.NAICS6_make = input commodity required to make NAICS6_use
-    # input_output_values.NAICS6_use = output commodity uses input_output_values.NAICS6_make as an input
+    # io_values.NAICS6_make = input commodity required to make NAICS6_use
+    # io_values.NAICS6_use = output commodity uses io_values.NAICS6_make as an input
 
     producers = firms[firms.producer]
 
     # we only want i/o pairs that use producers commodity as an input
-    input_output_values = input_output_values[ input_output_values.NAICS6_make.isin(producers.NAICS6_make.unique())]
+    io_values = io_values[io_values.NAICS6_make.isin(producers.NAICS6_make.unique())]
 
     # - For each output, select only the most important input commodities
     # Calculate cumulative pct value of the consumption inputs by output commodity
-    input_output_values = input_output_values.sort_values(by=['NAICS6_use', 'pro_val'])
-    input_output_values['cum_pro_val'] = input_output_values.groupby('NAICS6_use')['pro_val'].transform('cumsum')
-    input_output_values['cum_pct_pro_val'] = input_output_values['cum_pro_val'] / input_output_values.groupby('NAICS6_use')['cum_pro_val'].transform('last')
+    io_values = io_values.sort_values(by=['NAICS6_use', 'pro_val'])
+    io_values['cum_pro_val'] = io_values.groupby('NAICS6_use')['pro_val'].transform('cumsum')
+    io_values['cum_pct_pro_val'] = \
+        io_values['cum_pro_val'] / io_values.groupby('NAICS6_use')['cum_pro_val'].transform('last')
 
     # select i/o commodities with highest pro_val for each NAICS6_use output
-    input_output_values = input_output_values[ input_output_values.cum_pct_pro_val > (1 - base_variables.BASE_PROVALTHRESHOLD)]
+    io_values = io_values[io_values.cum_pct_pro_val > (1 - base_variables.BASE_PROVALTHRESHOLD)]
 
     # FIXME - use factors?
     # InputOutputValues[,NAICS6_Make:=factor(NAICS6_Make,levels = levels(Firms$NAICS6_Make))]
     # InputOutputValues[,NAICS6_Use:=factor(NAICS6_Use,levels = levels(Firms$NAICS6_Make))]
 
-    # - Calcuate value per employee required (US domestic employment) for each producer NAICS6_make code
-    producer_emp_counts_by_naics = producers[ ~producers.state_FIPS.isnull() ][['NAICS6_make', 'emp']].groupby('NAICS6_make')['emp'].sum()
+    # - Calcuate value per employee required for each domestic producer NAICS6_make code
+    producer_emp_counts_by_naics = \
+        producers[~producers.state_FIPS.isnull()][['NAICS6_make', 'emp']].\
+        groupby('NAICS6_make')['emp'].sum()
 
     # - annotate input_output_values with total emp count for producers of NAICS6_input
-    input_output_values['emp'] = reindex(producer_emp_counts_by_naics, input_output_values.NAICS6_make)
-    input_output_values['val_emp'] = input_output_values.pro_val / input_output_values.emp
+    io_values['emp'] = \
+        reindex(producer_emp_counts_by_naics, io_values.NAICS6_make)
+    io_values['val_emp'] = io_values.pro_val / io_values.emp
 
-    t0 = print_elapsed_time("input_output_values", t0, debug=True)
+    t0 = print_elapsed_time("io_values", t0, debug=True)
 
     # - inner join sample_firms with the top inputs required to produce firm's product
     # pairs is a list of firms with one row for every major commodity the firm consumes
     # pairs.NAICS6_use is the commodity the firm PRODUCES
     # pairs.NAICS6_make is a commodity that the firm CONSUMES
     producers = pd.merge(left=producers.reset_index(),
-                     right=input_output_values[['NAICS6_use', 'NAICS6_make', 'val_emp']],
-                     left_on='NAICS6_make', right_on='NAICS6_make', how='inner')
+                         right=io_values[['NAICS6_use', 'NAICS6_make', 'val_emp']],
+                         left_on='NAICS6_make', right_on='NAICS6_make', how='inner')
 
     # compute producer commodity value
     producers['prod_val'] = producers.val_emp * producers.emp
@@ -827,7 +845,8 @@ def calc_sample_groups(nconsumers, nproducers):
             nconst = math.ceil(nconsumers / n_groups)
             nprodt = math.ceil(nproducers / n_groups)
     else:
-        while (nconst * SUPPLIERS_PER_BUYER > COMBINATION_THRESHOLD or nconst / nprodt > CONS_PROD_RATIO_LIMIT):
+        while (nconst * SUPPLIERS_PER_BUYER > COMBINATION_THRESHOLD or
+               nconst / nprodt > CONS_PROD_RATIO_LIMIT):
             n_groups += 1
             nconst = math.ceil(nconsumers / n_groups)
 
@@ -842,54 +861,57 @@ def firm_sim_naics_set(producers, consumers):
 
     # - matching consumers and suppliers -- by NAICS codes
     producers_summary_naics = \
-        producers[['output_commodity', 'size', 'output_capacity_tons']].groupby('output_commodity').\
-            agg({'size': ['count', 'sum'], 'output_capacity_tons': 'sum'})
+        producers[['output_commodity', 'size', 'output_capacity_tons']].\
+        groupby('output_commodity').\
+        agg({'size': ['count', 'sum'], 'output_capacity_tons': 'sum'})
     producers_summary_naics.columns = producers_summary_naics.columns.map('_'.join)
     producers_summary_naics.reset_index(inplace=True)  # explicit output_commodity column
     producers_summary_naics.rename(columns={'size_count': 'producers',
                                             'size_sum': 'employment',
                                             'output_capacity_tons_sum': 'output_capacity',
                                             'output_commodity': 'NAICS'},
-                                 inplace=True)
+                                   inplace=True)
 
     consumers_summary_naics = \
-        consumers[['input_commodity', 'size', 'purchase_amount_tons']].groupby('input_commodity').\
-            agg({'size': ['count', 'sum'], 'purchase_amount_tons': 'sum'})
+        consumers[['input_commodity', 'size', 'purchase_amount_tons']].\
+        groupby('input_commodity').\
+        agg({'size': ['count', 'sum'], 'purchase_amount_tons': 'sum'})
     consumers_summary_naics.columns = consumers_summary_naics.columns.map('_'.join)
     consumers_summary_naics.reset_index(inplace=True)  # explicit input_commodity column
     consumers_summary_naics.rename(columns={'size_count': 'consumers',
                                             'size_sum': 'employment',
                                             'purchase_amount_tons_sum': 'input_requirements',
                                             'input_commodity': 'NAICS'},
-                                 inplace=True)
+                                   inplace=True)
 
     match_summary_naics = pd.merge(
-        left = producers_summary_naics[['NAICS', 'producers', 'output_capacity']],
-        right = consumers_summary_naics[['NAICS', 'consumers', 'input_requirements']],
+        left=producers_summary_naics[['NAICS', 'producers', 'output_capacity']],
+        right=consumers_summary_naics[['NAICS', 'consumers', 'input_requirements']],
         left_on='NAICS',
         right_on='NAICS',
         how='outer'
     )
 
-    match_summary_naics = match_summary_naics[["NAICS", "producers", "consumers", "output_capacity", "input_requirements"]]
+    match_summary_naics = match_summary_naics[["NAICS", "producers", "consumers",
+                                               "output_capacity", "input_requirements"]]
 
-    match_summary_naics['ratio_output'] = match_summary_naics.output_capacity / match_summary_naics.input_requirements
-    match_summary_naics['possible_matches'] = match_summary_naics.producers * match_summary_naics.consumers
+    match_summary_naics['ratio_output'] = \
+        match_summary_naics.output_capacity / match_summary_naics.input_requirements
+    match_summary_naics['possible_matches'] = \
+        match_summary_naics.producers * match_summary_naics.consumers
 
     # - Get number of (none NA) matches by NAICS, and check for imbalance in producers and consumers
 
-    naics_set = match_summary_naics[ ~match_summary_naics.possible_matches.isnull() ]
+    naics_set = match_summary_naics[~match_summary_naics.possible_matches.isnull()]
     naics_set = naics_set[["NAICS", "producers", "consumers", "possible_matches"]]
 
     naics_set['con_prod_ratio'] = naics_set.consumers / naics_set.producers
 
     # calculate group sizes for each commodity so that all groups are less than threshold
     # Either cut both consumers and producers or just consumers (with all producers in each group)
-
-    f = lambda x: calc_sample_groups(x['consumers'], x['producers'])
-
     naics_set['nprodt'], naics_set['nconst'], naics_set['split_prod'], naics_set['n_groups'] = \
-        zip(*naics_set.apply(f, axis='columns'))
+        zip(*naics_set.apply(
+            lambda x: calc_sample_groups(x['consumers'], x['producers']), axis='columns'))
 
     # FIXME not sure it is worth building these until we know how they will be used
     #   #key the tables for faster subsetting on naics codes
@@ -918,12 +940,12 @@ def firm_sim_summary(output_dir, producers, consumers, firms, firm_pref_weights)
     firms_sum['employment'] = firms.emp.sum()
 
     # - firms_emp_by_sctg
-    firms_emp_by_sctg = \
-        firms[['SCTG', 'emp']].groupby('SCTG').emp.\
-            agg(['sum', 'count']).\
-            rename(columns={'sum': 'employment', 'count': 'establishments'}).\
-            reset_index()
-    firms_emp_by_sctg['SCTG_name'] = reindex(firm_pref_weights.SCTG_description, firms_emp_by_sctg.SCTG)
+    firms_emp_by_sctg = firms[['SCTG', 'emp']].groupby('SCTG').emp.\
+        agg(['sum', 'count']).\
+        rename(columns={'sum': 'employment', 'count': 'establishments'}).\
+        reset_index()
+    firms_emp_by_sctg['SCTG_name'] = \
+        reindex(firm_pref_weights.SCTG_description, firms_emp_by_sctg.SCTG)
     firms_emp_by_sctg.to_csv(os.path.join(output_dir, "firms_emp_by_sctg.csv"), index=False)
 
     # - producers
@@ -936,16 +958,19 @@ def firm_sim_summary(output_dir, producers, consumers, firms, firm_pref_weights)
 
     # - producers_emp_by_sctg
     producers_emp_by_sctg = \
-        producers[['SCTG', 'size', 'output_capacity_tons']].groupby('SCTG').\
-            agg({'size': ['count', 'sum'], 'output_capacity_tons': 'sum'})
+        producers[['SCTG', 'size', 'output_capacity_tons']].\
+        groupby('SCTG').\
+        agg({'size': ['count', 'sum'], 'output_capacity_tons': 'sum'})
     producers_emp_by_sctg.columns = producers_emp_by_sctg.columns.map('_'.join)
     producers_emp_by_sctg.rename(columns={'size_count': 'producers',
                                           'size_sum': 'employment',
                                           'output_capacity_tons_sum': 'output_capacity'},
                                  inplace=True)
     producers_emp_by_sctg.reset_index(inplace=True)  # explicit SCTG column
-    producers_emp_by_sctg['SCTG_name'] = reindex(firm_pref_weights.SCTG_description, producers_emp_by_sctg.SCTG)
-    producers_emp_by_sctg.to_csv(os.path.join(output_dir, "producers_emp_by_sctg.csv"), index=False)
+    producers_emp_by_sctg['SCTG_name'] = \
+        reindex(firm_pref_weights.SCTG_description, producers_emp_by_sctg.SCTG)
+    producers_emp_by_sctg.to_csv(os.path.join(output_dir, "producers_emp_by_sctg.csv"),
+                                 index=False)
 
     # - consumers
 
@@ -955,24 +980,26 @@ def firm_sim_summary(output_dir, producers, consumers, firms, firm_pref_weights)
     firms_sum['consumer_inputs'] = consumers.purchase_amount_tons.sum()
 
     # - consumers_by_sctg
-    consumers_by_sctg = \
-        consumers[['SCTG', 'purchase_amount_tons']].groupby('SCTG').purchase_amount_tons.\
-            agg(['sum', 'count']).\
-            rename(columns={'sum': 'input_requirements', 'count': 'consumers'}).\
-            reset_index()
+    consumers_by_sctg = consumers[['SCTG', 'purchase_amount_tons']].\
+        groupby('SCTG').purchase_amount_tons.agg(['sum', 'count']).\
+        rename(columns={'sum': 'input_requirements', 'count': 'consumers'}).\
+        reset_index()
 
-    consumers_by_sctg['SCTG_name'] = reindex(firm_pref_weights.SCTG_description, consumers_by_sctg.SCTG)
+    consumers_by_sctg['SCTG_name'] = \
+        reindex(firm_pref_weights.SCTG_description, consumers_by_sctg.SCTG)
     consumers_by_sctg.to_csv(os.path.join(output_dir, "consumers_by_sctg.csv"), index=False)
 
     # - matching consumers and suppliers -- by SCTG category
 
     match_summary = pd.merge(
-        left = producers_emp_by_sctg[['SCTG', 'SCTG_name', 'producers', 'output_capacity']],
-        right = consumers_by_sctg[['SCTG', 'consumers', 'input_requirements']],
+        left=producers_emp_by_sctg[['SCTG', 'SCTG_name', 'producers', 'output_capacity']],
+        right=consumers_by_sctg[['SCTG', 'consumers', 'input_requirements']],
         left_on='SCTG',
         right_on='SCTG'
     ).rename(columns={'SCTG': 'commodity'})
-    match_summary = match_summary[["commodity","SCTG_name","producers","consumers","output_capacity","input_requirements"]]
+    # reorder fields
+    match_summary = match_summary[["commodity", "SCTG_name", "producers", "consumers",
+                                   "output_capacity", "input_requirements"]]
     match_summary['ratio_output'] = match_summary.output_capacity / match_summary.input_requirements
     match_summary['possible_matches'] = match_summary.producers * match_summary.consumers
     match_summary.to_csv(os.path.join(output_dir, "matches.csv"), index=False)
@@ -981,202 +1008,6 @@ def firm_sim_summary(output_dir, producers, consumers, firms, firm_pref_weights)
     summary = pd.DataFrame({'key': firms_sum.keys(), 'value': firms_sum.values()})
     summary.to_csv(os.path.join(output_dir, "firm_sim_summary.csv"), index=False)
 
-
-# ######################## model steps
-#
-#
-# @inject.step()
-# def firm_synthesis_load_firms(NAICS2012_to_NAICS2007):
-#
-#     NAICS2012_to_NAICS2007 = NAICS2012_to_NAICS2007.to_frame()
-#
-#     firms = firm_sim_load_firms(
-#         NAICS2012_to_NAICS2007
-#     )
-#
-#     inject.add_table('firms_establishments', firms)
-#
-#
-# @inject.step()
-# def firm_synthesis_enumerate(
-#         firms_establishments,
-#         NAICS2007_to_NAICS2007io,
-#         employment_categories,
-#         naics_industry,
-#         industry_10_5,
-#         naics_empcat):
-#
-#     firms = firms_establishments.to_frame()
-#     NAICS2007_to_NAICS2007io = NAICS2007_to_NAICS2007io.to_frame()
-#     employment_categories = employment_categories.to_frame()
-#     naics_industry = naics_industry.to_frame()
-#     industry_10_5 = industry_10_5.to_frame()
-#     naics_empcat = naics_empcat.to_frame()
-#
-#     firms = firm_sim_enumerate(
-#         firms,
-#         NAICS2007_to_NAICS2007io,
-#         employment_categories,
-#         naics_industry,
-#         industry_10_5,
-#         naics_empcat
-#     )
-#
-#     pipeline.replace_table('firms_establishments', firms)
-#
-#
-# @inject.step()
-# def firm_synthesis_scale_employees(
-#         firms_establishments,
-#         employment_categories,
-#         lehd_naics_empcat,
-#         taz_fips,
-#         taz_faf4,
-#         socio_economics_taz):
-#     """
-#      Scale Firms to Employment Forecasts
-#     """
-#
-#     firms = firms_establishments.to_frame()
-#     employment_categories = employment_categories.to_frame()
-#     lehd_naics_empcat = lehd_naics_empcat.to_frame()
-#     taz_fips = taz_fips.to_frame()
-#     taz_faf4 = taz_faf4.to_frame()
-#     socio_economics_taz = socio_economics_taz.to_frame()
-#
-#     firms = firm_sim_scale_employees(
-#         firms,
-#         employment_categories,
-#         lehd_naics_empcat,
-#         taz_fips,
-#         taz_faf4,
-#         socio_economics_taz
-#     )
-#
-#     pipeline.replace_table('firms_establishments', firms)
-#
-#     # # Summarize employment of synthesized firms by TAZ and Model_EmpCat
-#     # employment = firms.groupby(['TAZ', 'model_emp_cat'])['emp'].sum().to_frame(name='emp_CBP').reset_index()
-#     # employment_SE = socio_economics_taz.reset_index().melt(id_vars='TAZ', var_name='model_emp_cat', value_name='emp_SE')
-#     # employment = employment.merge(right=employment_SE, how='outer', on=['TAZ', 'model_emp_cat'])
-#     # employment = employment[~employment.model_emp_cat.isin(emp_cats_absent_from_cbp)]
-#     # inject.add_table('employment', employment)
-#
-#
-# @inject.step()
-# def firm_synthesis_simulate_production_commodities(
-#         firms_establishments,
-#         NAICS2007io_to_SCTG):
-#     """
-#     Simulate Production Commodities, choose a single commodity for firms making more than one
-#     """
-#
-#     firms = firms_establishments.to_frame()
-#     NAICS2007io_to_SCTG = NAICS2007io_to_SCTG.to_frame()
-#
-#     firms = firm_sim_simulate_production_commodities(
-#         firms,
-#         NAICS2007io_to_SCTG
-#     )
-#
-#     pipeline.replace_table('firms_establishments', firms)
-#
-#
-# @inject.step()
-# def firm_synthesis_types(firms_establishments):
-#     """
-#     Identify special firms: warehouses, producers, and makers subsample
-#     """
-#
-#     firms = firms_establishments.to_frame()
-#
-#     firms = firm_sim_types(firms)
-#
-#     pipeline.replace_table('firms_establishments', firms)
-#
-#
-# @inject.step()
-# def firm_synthesis_iopairs(firms_establishments, input_output_values, NAICS2007io_to_SCTG):
-#     """
-#     Sample producer and consumer firms to create buyer-supplier pairings
-#     """
-#
-#     t0 = print_elapsed_time()
-#
-#     firms = firms_establishments.to_frame()
-#     input_output_values = input_output_values.to_frame()
-#     NAICS2007io_to_SCTG = NAICS2007io_to_SCTG.to_frame()
-#
-#     pairs = firm_sim_iopairs(
-#         firms,
-#         input_output_values,
-#         NAICS2007io_to_SCTG
-#     )
-#
-#     inject.add_table('firm_input_output_pairs', pairs)
-#
-#
-# @inject.step()
-# def firm_synthesis_producers(firms_establishments, input_output_values, unitcost):
-#
-#     firms = firms_establishments.to_frame()
-#     input_output_values = input_output_values.to_frame()
-#     unitcost = unitcost.to_frame()
-#
-#     producers = firm_sim_producers(
-#         firms,
-#         input_output_values,
-#         unitcost
-#     )
-#
-#     inject.add_table('producers', producers)
-#
-#
-# @inject.step()
-# def firm_synthesis_consumers(firms_establishments, firm_input_output_pairs, unitcost,
-#                              firm_pref_weights):
-#     firms = firms_establishments.to_frame()
-#     firm_input_output_pairs = firm_input_output_pairs.to_frame()
-#     unitcost = unitcost.to_frame()
-#     firm_pref_weights = firm_pref_weights.to_frame()
-#
-#     consumers = firm_sim_consumers(
-#         firms,
-#         firm_input_output_pairs,
-#         unitcost,
-#         firm_pref_weights)
-#
-#     inject.add_table('consumers', consumers)
-#
-#
-# @inject.step()
-# def firm_synthesis_naics_set(producers, consumers):
-#     """
-#     output summaries
-#
-#     """
-#
-#     producers = producers.to_frame()
-#     consumers = consumers.to_frame()
-#
-#     matches_naics, naics_set = firm_sim_naics_set(producers, consumers)
-#
-#     inject.add_table('matches_naics', matches_naics)
-#     inject.add_table('naics_set', naics_set)
-#
-#
-# @inject.step()
-# def firm_synthesis_summary(output_dir, producers, consumers, firms_establishments,
-#                            firm_pref_weights):
-#     producers = producers.to_frame()
-#     consumers = consumers.to_frame()
-#     firms = firms_establishments.to_frame()
-#     firm_pref_weights = firm_pref_weights.to_frame()
-#
-#     firm_sim_summary(output_dir, producers, consumers, firms, firm_pref_weights)
-#
-#
-# #########################################################################################
 
 @inject.step()
 def firm_synthesis(
@@ -1266,7 +1097,6 @@ def firm_synthesis(
         firm_pref_weights)
     t0 = print_elapsed_time("firm_sim_consumers", t0, debug=True)
 
-
     matches_naics, naics_set = firm_sim_naics_set(
         producers,
         consumers)
@@ -1286,4 +1116,3 @@ def firm_synthesis(
     inject.add_table('consumers', consumers)
     inject.add_table('matches_naics', matches_naics)
     inject.add_table('naics_set', naics_set)
-

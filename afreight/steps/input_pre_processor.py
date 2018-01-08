@@ -17,6 +17,7 @@ from afreight.util import scenario_dir
 
 logger = logging.getLogger(__name__)
 
+
 @inject.step()
 def input_pre_processor():
 
@@ -30,4 +31,3 @@ def input_pre_processor():
 
     for table_name in pipeline.orca_dataframe_tables():
         df = inject.get_table(table_name, None).to_frame()
-        #print ("\n%s\n" % table_name), df.dtypes

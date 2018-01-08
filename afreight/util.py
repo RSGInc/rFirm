@@ -12,6 +12,7 @@ from activitysim.core.config import setting
 
 logger = logging.getLogger(__name__)
 
+
 def scenario_dir():
 
     scenarios_dir = setting('scenarios_dir')
@@ -24,6 +25,7 @@ def scenario_dir():
     assert os.path.exists(scenario_dir_path), "scenario_dir not found: %s" % scenario_dir_path
 
     return scenario_dir_path
+
 
 def read_table(table_name, table_info, data_dir):
 
@@ -53,6 +55,7 @@ def read_table(table_name, table_info, data_dir):
             df.index.names = [index_col]
 
     return df
+
 
 def load_tables(table_list_name, data_dir=None):
 
@@ -127,4 +130,3 @@ def target_round(weights, target_sum=None):
     assert rounded_weights.sum() == target_sum
 
     return rounded_weights
-
