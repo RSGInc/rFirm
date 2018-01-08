@@ -1,66 +1,123 @@
+#firms_file_name: &firms_file_name firms.csv
+#store: pipeline.h5
 
-data_dir: sample_data
+firms_file_name: &firms_file_name test_firms.csv
+store: test_pipeline.h5
+
+#data_dir: sample_data
+
+scenarios_dir: scenarios
+scenario_name: base
+output_dir: scenarios/base/output
 
 # input_pre_processor input_tables
 input_tables:
-
-  corresp_taz_faf4:
-    filename: corresp_taz_faf4.csv
-    index_col: TAZ
-
-  corresp_taz_fips:
+  naics_industry:
+    filename: corresp_naics_industry.csv
+    index_col: NAICS3
+  industry_10_5:
+    filename: corresp_industry_10_5.csv
+    index_col: industry10
+  naics_empcat:
+    filename: corresp_naics_empcat.csv
+    index_col: NAICS2n3
+    column_map:
+      Model_EmpCat: model_emp_cat
+  lehd_naics_empcat:
+    filename: lehd_naics_empcat.csv
+    column_map:
+      Model_EmpCat: model_emp_cat
+#  taz1_taz2:
+#    filename: corresp_taz1_taz2.csv
+  taz_fips:
     filename: corresp_taz_fips.csv
-    index_col: TAZ
     column_map:
-      StateFIPS: state_FIPS
       CountyFIPS: county_FIPS
-
-  cbp:
-    filename: cbp14co.txt
+      StateFIPS: state_FIPS
+  taz_faf4:
+    filename: corresp_taz_faf4.csv
+  unitcost:
+    filename: data_unitcost.csv
     column_map:
-      fipstate: state_FIPS
-      fipscty: county_FIPS
-
-  NAICS_to_NAICSio:
+      Commodity_SCTG: SCTG
+      UnitCost: unit_cost
+      #Commodity_SCTG,UnitCost,Tons,Value
+    index_col: SCTG
+  firm_pref_weights:
+    filename: data_firm_pref_weights.csv
+    column_map:
+      Commodity_SCTG: SCTG
+      CostWeight: cost_weight
+      TimeWeight: time_weight
+      SingleSourceMaxFraction: single_source_max_fraction
+      Commodity_SCTG_desc: SCTG_description
+    index_col: SCTG
+  employment_categories:
+    filename: EmploymentCategories.csv
+    column_map:
+      EstablishmentSize: esizecat
+      ID: id
+  input_output_values:
+    filename: InputOutputValues.csv
+    column_map:
+      NAICS6_Make: NAICS6_make
+      NAICS6_Use: NAICS6_use
+      ProVal: pro_val
+  NAICS2007_to_NAICS2007io:
     filename: NAICS2007_to_NAICS2007io.csv
     index_col: NAICS
-
-  # convert NAICSio to Standard Classification of Transported Goods (SCTG)
-  NAICSio_to_SCTG:
+  NAICS2012_to_NAICS2007:
+    filename: NAICS2012_to_NAICS2007.csv
+    # no index col as there are dupes in both columns
+  NAICS2007io_to_SCTG:
     filename: NAICS2007io_to_SCTG.csv
-    index_col: NAICSio
-
-  # labels for 2,3,4,5, and 6 digit NAICS codes
-  NAICS2007_labels:
-    filename: NAICS2007.csv
-
-  # 2014 SUSB Annual Data Tables by Establishment Industry
-  SUSB_firms:
-    filename: SUSB_Firms.csv
     column_map:
-      naics: NAICS
-    index_col: NAICS
+      Proportion: proportion
 
-  # County_to_FAFZone from RSGFAF
-  FIPS_to_FAFZone:
-    filename: County_to_FAFZone.csv
+scenario_input_tables:
+  socio_economics_taz:
+    filename: lehdtazm.csv
+    index_col: TAZ
+
+firm_synthesis_tables:
+  firms_establishments:
+    filename: *firms_file_name
     column_map:
-      StateFIPS: state_FIPS
+      estid: bus_id
+      TAZ1: TAZ
       CountyFIPS: county_FIPS
-      State: state
-      FAFZone_4.1: FAFZone_4_1
-      FAFZone_4.2: FAFZone_4_2
-      FAFZone_4.3: FAFZone_4_3
-    index_col: FIPS
+      StateFIPS: state_FIPS
+      #naics: NAICS2012
+    index_col: bus_id
+
+#  # 2014 SUSB Annual Data Tables by Establishment Industry
+#  SUSB_firms:
+#    filename: SUSB_Firms.csv
+#    column_map:
+#      naics: NAICS
+#    index_col: NAICS
+
+
 
 
 run_list:
   steps:
     - input_pre_processor
+#    - firm_synthesis_load_firms
+#    - firm_synthesis_enumerate
+#    - firm_synthesis_scale_employees
+#    - firm_synthesis_simulate_production_commodities
+#    - firm_synthesis_types
+#    - firm_synthesis_iopairs
+#    - firm_synthesis_producers
+#    - firm_synthesis_consumers
+#    - firm_synthesis_naics_set
+#    - firm_synthesis_summary
     - firm_synthesis
+    - write_data_dictionary
     - write_tables
 
-  #resume_after: input_pre_processor
+  #resume_after: firm_synthesis_consumers
 
 
 
@@ -72,7 +129,10 @@ run_list:
 #  tables:
 #    - cbp
 #
-#output_tables:
-#  action: include
-#  tables:
-#    - sampledata
+output_tables:
+  action: include
+  tables:
+    - matches_naics
+    - naics_set
+
+

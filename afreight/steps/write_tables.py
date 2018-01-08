@@ -13,6 +13,18 @@ logger = logging.getLogger(__name__)
 
 
 @inject.step()
+def write_data_dictionary(output_dir):
+
+    output_tables = pipeline.checkpointed_tables()
+
+    # write data dictionary for all checkpointed_tables
+    with open(os.path.join(output_dir, 'data_dict.csv'), 'a') as file:
+        for table_name in output_tables:
+            df = inject.get_table(table_name, None).to_frame()
+            print >> file, "\n### %s (%s)\n" % (table_name, df.shape), df.dtypes
+
+
+@inject.step()
 def write_tables(output_dir):
 
     output_tables_settings_name = 'output_tables'

@@ -1,6 +1,9 @@
-#national_freight/data/*
+national_freight/regression_data/
 .idea
 .ipynb_checkpoints
+.RData
+.Rhistory
+scratch.R
 
 
 # Byte-compiled / optimized / DLL files
@@ -13,7 +16,6 @@ __pycache__/
 # Distribution / packaging
 .Python
 env/
-bin/
 build/
 develop-eggs/
 dist/
