@@ -16,7 +16,10 @@ logger = logging.getLogger(__name__)
 def scenario_dir():
 
     scenarios_dir = setting('scenarios_dir')
-    assert scenarios_dir is not None, "scenarios_dir not defined in settings file"\
+    assert scenarios_dir is not None, "scenarios_dir not defined in settings file"
+
+    if not os.path.exists(scenarios_dir):
+        raise RuntimeError("scenarios_dir not found: %s" % scenarios_dir)
 
     scenario_name = setting('scenario_name')
     assert scenario_name is not None, "scenario_name not defined in settings file"

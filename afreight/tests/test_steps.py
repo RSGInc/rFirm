@@ -24,9 +24,13 @@ def test_full_run1():
 
     # data_dir = os.path.join(os.path.dirname(__file__), 'data')
     data_dir = os.path.join(os.path.dirname(__file__),
-                            '..', '..', 'national_freight', 'sample_data')
-
+                            '..', '..', 'national_freight', 'data')
     orca.add_injectable("data_dir", data_dir)
+
+    # scenarios_dir = os.path.join(os.path.dirname(__file__), 'scenarios')
+    scenarios_dir = os.path.join(os.path.dirname(__file__),
+                                 '..', '..', 'national_freight', 'scenarios')
+    orca.add_injectable("scenarios_dir", scenarios_dir)
 
     output_dir = os.path.join(os.path.dirname(__file__), 'output')
     orca.add_injectable("output_dir", output_dir)
@@ -44,12 +48,12 @@ def test_full_run1():
 
     pipeline.run(models=steps, resume_after=None)
 
-    geo_crosswalk = pipeline.get_table('geo_crosswalk')
-    assert geo_crosswalk.index.name == 'TAZ'
-    assert 'FAF4' in geo_crosswalk.columns
-    assert 'FIPS' in geo_crosswalk.columns
-
-    assert os.path.exists(os.path.join(output_dir, 'cbp.csv'))
+    # geo_crosswalk = pipeline.get_table('geo_crosswalk')
+    # assert geo_crosswalk.index.name == 'TAZ'
+    # assert 'FAF4' in geo_crosswalk.columns
+    # assert 'FIPS' in geo_crosswalk.columns
+    #
+    assert os.path.exists(os.path.join(output_dir, 'naics_set.csv'))
 
     # tables will no longer be available after pipeline is closed
     pipeline.close_pipeline()
