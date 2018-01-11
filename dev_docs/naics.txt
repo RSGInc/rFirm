@@ -1,0 +1,104 @@
+
+    """
+    ############# from NFM_Firmsynthesis.R
+    #
+    # #naics-SCTG makers list
+    # NAICS2007_to_NAICS2007io	#from the rFreight package
+    # NAICS2007io_to_SCTG       #from the rFreight package (only includes n2<52) ##TODO: Check this?
+    #
+    # #labels for naics
+    # NAICS2007                 #from the rFreight package
+    """
+
+    """
+    ############# from rFreight package
+
+    # ### 2007 NAICS to 2007 NAICSio -----------------------------------------------------------
+    #
+    # NAICS2007_to_NAICS2007io <- data.table(read_excel(path = file.path("dev", "data inputs", "IOUse_Before_Redefinitions_PRO_2007_Detail.xlsx"),
+    #                                                   sheet = "NAICS to NAICSio"))
+    # NAICS2007_to_NAICS2007io[, NAICS := as.integer(NAICS)]
+    # NAICS2007_to_NAICS2007io[, NAICSio := factor(NAICSio, levels = levels(NAICS2007io[["NAICSio"]]))]
+    # setkey(NAICS2007_to_NAICS2007io, NAICS)
+
+    # ### 2007 NAICSio to SCTG -----------------------------------------------------------------
+    #
+    # # Use the old correspondence as a starting point
+    # corresp.orig <- fread(file.path("dev", "data inputs", "corresp_naics6_n6io_sctg.csv"), colClasses = c(NAICS6_Make = "factor"))
+    #
+    # # The old correspondence had duplicate rows per NAICSio--simplify
+    # NAICS2007io_to_SCTG <- unique(corresp.orig[!(is.na(SCTG) | SCTG == 0), .(NAICSio = NAICS6_Make, SCTG, Proportion = Prop)])
+    # NAICS2007io_to_SCTG[, NAICSio := factor(NAICSio, levels = levels(NAICS2007io[["NAICSio"]]))]
+    # NAICS2007io_to_SCTG[, SCTG := as.integer(SCTG)]
+    # NAICS2007io_to_SCTG[, Proportion := as.numeric(Proportion)]
+    #
+    # # Custom modifications to the correspondence based on Colin's expertise
+    # NAICS2007io_to_SCTG[NAICSio == "211000" & SCTG == 20, SCTG := 19]
+    # NAICS2007io_to_SCTG[NAICSio == "324110" & SCTG == 17, Proportion := 0.25]
+    # NAICS2007io_to_SCTG <- rbind(NAICS2007io_to_SCTG, data.table(NAICSio = "324110", SCTG = 18:19, Proportion = c(0.25, 0.5)))
+    #
+    # # Some NAICSio may produce multiple SCTGs and so they have a Proportion variable
+    # # Renormalize Proportion to deal with any rounding issues
+    # NAICS2007io_to_SCTG[, Proportion := Proportion/sum(Proportion), by = NAICSio]
+    #
+    # setkey(NAICS2007io_to_SCTG, NAICSio)
+    # rm(corresp.orig)
+
+    # ### 2007 North American Industry Classification System (NAICS) Codes ---------------------
+    #
+    # # Download NAICS file from census website and put into .CSV format
+    # download.file("http://www.census.gov/eos/www/naics/reference_files_tools/2007/naics07.txt", "dev/data inputs/naics07.txt", quiet = TRUE)
+    # NAICS2007.string <- substring(readChar(file.path("dev", "data inputs", "naics07.txt"), file.info(file.path("dev", "data inputs", "naics07.txt"))$size), 82)
+    # NAICS2007.string <- substring(NAICS2007.string, 1, nchar(NAICS2007.string)-24)
+    # NAICS2007.clean <- gsub("(?:\\d+\\s+)(\\d+(-\\d\\d)*)(?:\\s+)", '\\1,', NAICS2007.string)
+    # NAICS2007.clean <- gsub("\\r\\r\\n",'\n', NAICS2007.clean)
+    # write(NAICS2007.clean, file.path("dev", "data inputs", "naics07_gsub.csv"))
+    #
+    # # Load data into data.table format with proper column names and types
+    # NAICS2007.raw <- data.table(read.csv(file.path("dev", "data inputs", "naics07_gsub.csv"), header = FALSE))
+    # names(NAICS2007.raw) <- c("NAICS", "Label")
+    # NAICS2007.raw <- NAICS2007.raw[, NAICS := as.character(NAICS)]
+    #
+    # # Remove rows with NAICS2 format as range (eg. 31-33 instead of
+    # # 31, 32, 33)
+    # NAICS2007.ranges <- NAICS2007.raw[NAICS %like% "\\d\\d-\\d\\d"]
+    # NAICS2007.raw <- NAICS2007.raw[!(NAICS %like% "\\d\\d-\\d\\d")]
+    # NAICS2007.raw[, NAICS := as.integer(NAICS)]
+    #
+    # # Loop through range rows and re-add as discrete entries
+    # for (i in 1:dim(NAICS2007.ranges)[1]) {
+    #   text <- NAICS2007.ranges$NAICS[i]
+    #   first <- as.integer(sub("-\\d\\d", "", text))
+    #   last <- as.integer(sub("\\d\\d-", "", text))
+    #   for (j in first:last) {
+    #     NAICS2007.raw <- rbind(NAICS2007.raw, list(j, NAICS2007.ranges$Label[i]))
+    #   }
+    # }
+    #
+    # # Pull each length of code into own table with reference to code with
+    # # one fewer digits, rename column names.
+    # NAICS2007.2 <- NAICS2007.raw[NAICS < 100,
+    #                              .(                                      NAICS2 = NAICS, Label2 = Label)]
+    # NAICS2007.3 <- NAICS2007.raw[NAICS >= 100 & NAICS < 1000,
+    #                              .(NAICS2 = as.integer(floor(NAICS/10)), NAICS3 = NAICS, Label3 = Label)]
+    # NAICS2007.4 <- NAICS2007.raw[NAICS >= 1000 & NAICS < 10000,
+    #                              .(NAICS3 = as.integer(floor(NAICS/10)), NAICS4 = NAICS, Label4 = Label)]
+    # NAICS2007.5 <- NAICS2007.raw[NAICS >= 10000 & NAICS < 100000,
+    #                              .(NAICS4 = as.integer(floor(NAICS/10)), NAICS5 = NAICS, Label5 = Label)]
+    # NAICS2007.6 <- NAICS2007.raw[NAICS >= 100000,
+    #                              .(NAICS5 = as.integer(floor(NAICS/10)), NAICS6 = NAICS, Label6 = Label)]
+    #
+    # # Merge all code lengths into one table, matching up by shorter codes
+    # NAICS2007 <- merge(NAICS2007.2, NAICS2007.3, by = "NAICS2", all.y = TRUE)
+    # NAICS2007 <- merge(NAICS2007,   NAICS2007.4, by = "NAICS3", all.y = TRUE)
+    # NAICS2007 <- merge(NAICS2007,   NAICS2007.5, by = "NAICS4", all.y = TRUE)
+    # NAICS2007 <- merge(NAICS2007,   NAICS2007.6, by = "NAICS5", all.y = TRUE)
+    #
+    # # Set column order and table keys
+    # setcolorder(NAICS2007, neworder = c(paste0("NAICS", 2:6), paste0("Label", 2:6)))
+    # setkeyv(NAICS2007, cols = paste0("NAICS", 2:6))
+    #
+    # # Remove temporary objects and values
+    # rm(list = c("NAICS2007.2", "NAICS2007.3", "NAICS2007.4", "NAICS2007.5", "NAICS2007.6", "NAICS2007.ranges",
+    #             "NAICS2007.raw", "i", "j", "first", "last", "text", "NAICS2007.clean", "NAICS2007.string"))
+    """

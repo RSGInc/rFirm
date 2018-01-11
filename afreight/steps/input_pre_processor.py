@@ -12,6 +12,8 @@ from activitysim.core import pipeline
 
 from activitysim.core.config import setting
 
+from afreight.util import load_tables
+from afreight.util import scenario_dir
 
 logger = logging.getLogger(__name__)
 
@@ -19,43 +21,13 @@ logger = logging.getLogger(__name__)
 @inject.step()
 def input_pre_processor():
 
-    # alternate table list name may have been provided as a model argument
-    table_list_name = inject.get_step_arg('table_list', default='input_table_list')
-    table_list = setting(table_list_name)
-    assert table_list is not None, "table list '%s' not in settings." % table_list_name
-
-    # - allow settings to override injectable
+    # - load generic data
     data_dir = setting('data_dir', inject.get_injectable('data_dir'))
+    load_tables('input_tables', data_dir)
 
-    for table_info in table_list:
+    # - load scenario input data
+    scenario_input_dir = os.path.join(scenario_dir(), 'inputs')
+    load_tables('scenario_input_tables', scenario_input_dir)
 
-        tablename = table_info['tablename']
-
-        logger.info("input_pre_processor processing %s" % tablename)
-
-        # read the csv file
-        data_filename = table_info.get('filename', None)
-        data_file_path = os.path.join(data_dir, data_filename)
-        if not os.path.exists(data_file_path):
-            raise RuntimeError("input_pre_processor %s - input file not found: %s"
-                               % (tablename, data_file_path, ))
-
-        logger.info("Reading csv file %s" % data_file_path)
-        df = pd.read_csv(data_file_path, comment='#')
-
-        # rename columns
-        column_map = table_info.get('column_map', None)
-        if column_map:
-            df.rename(columns=column_map, inplace=True)
-
-        # set index
-        index_col = table_info.get('index_col', None)
-        if index_col is not None:
-            if index_col in df.columns:
-                df.set_index(index_col, inplace=True)
-            else:
-                df.index.names = [index_col]
-
-        logger.info("adding table %s" % tablename)
-
-        inject.add_table(tablename, df)
+    for table_name in pipeline.orca_dataframe_tables():
+        df = inject.get_table(table_name, None).to_frame()

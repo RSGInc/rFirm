@@ -52,7 +52,7 @@ if [ "$TRAVIS_REPO_SLUG" == "RSGInc/afreight" ] && \
 
         cd gh-pages
         rm -rf *
-        cp -R ../activitysim/docs/_build/html/* ./
+        cp -R ../afreight/docs/_build/html/* ./
         touch .nojekyll
         git add -A .
 

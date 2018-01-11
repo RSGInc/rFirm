@@ -1,0 +1,72 @@
+
+
+### firms.csv
+
+created by dev/NFM_Firmsynthesis_Allocate_Est_Firms.R
+written to FirmsandEstablishments.csv
+
+FAF4 are international so not TAZ, etc
+
+naics,CountyFIPS,FAF4,StateFIPS,n2,esizecat,emp,estid,TAZ,firmid
+111110,0,801,0,11,e12,0,7646282,0,6050355
+111110,0,802,0,11,e12,0,7647455,0,6051528
+111110,0,803,0,11,e12,0,7648628,0,6052701
+111110,0,804,0,11,e12,0,7649801,0,6053874
+111110,0,805,0,11,e12,0,7650974,0,6055047
+111110,0,806,0,11,e12,0,7652147,0,6056220
+111110,0,807,0,11,e12,0,7653320,0,6057393
+111110,0,808,0,11,e12,0,7654493,0,6058566
+...
+
+
+
+### generic data
+
+firm_sim_process_inputs reads the following
+
+naics_industry <-  "corresp_naics_industry.csv"
+naics_empcat   <-  "corresp_naics_empcat.csv"
+lehd_naics_empcat    <-  "lehd_naics_empcat.csv"
+taz1_taz2            <-  "corresp_taz1_taz2.csv"
+taz1_fips            <-  "corresp_taz_fips.csv"
+taz1_faf4            <-  "corresp_taz_faf4.csv"
+unitcost               <-  "data_unitcost.csv"
+data_firm_pref_weights <-  "data_firm_pref_weights.csv"
+EmploymentCategories   <-  "EmploymentCategories.rds"
+InputOutputValues      <-  "InputOutputValues.rds"
+
+### scenario data
+
+firm_sim_process_inputs reads the following
+
+  ### Load and process scenario input files
+  scenario.files <- c(SocioEconomicsTAZ2 = file.path(SCENARIO_INPUT_PATH, "lehdtazm.csv"),
+                      SocioEconomicsTAZ1 = file.path(SCENARIO_INPUT_PATH, "lehdtazm.csv"))
+  loadInputs(files = scenario.files, envir = envir,
+             fread.args = list(SocioEconomicsTAZ2 = list(select = c("TAZ", "HH", "aer","amf", "con",	"edu",
+                                                                    "fsd",	"gov",	"hss",	"mfg",	"mht",
+                                                                    "osv",	"pbs",	"rcs",	"twu",	"wt")),
+                               SocioEconomicsTAZ1 = list(select = c("TAZ", "HH", "aer","amf", "con",	"edu",
+                                                                    "fsd",	"gov",	"hss",	"mfg",	"mht",
+                                                                    "osv",	"pbs",	"rcs",	"twu",	"wt")))
+             )
+
+
+
+### rfreight data files
+rfreight_data_dir <- "/Users/jeff.doyle/work/rFreight/data/"
+dest_data_dir <- "/Users/jeff.doyle/work/afreight/national_freight/data/"
+
+load(file = paste(rfreight_data_dir, "correspondences.rda", sep=""))
+fwrite(NAICS2007_to_NAICS2007io, paste(dest_data_dir, "NAICS2007_to_NAICS2007io.csv", sep=""))
+fwrite(NAICS2007io_to_SCTG, paste(dest_data_dir, "NAICS2007io_to_SCTG.csv", sep=""))
+fwrite(NAICS2007, paste(dest_data_dir, "NAICS2007.csv", sep=""))
+
+fwrite(NAICS2012_to_NAICS2007, paste(dest_data_dir, "NAICS2012_to_NAICS2007.csv", sep=""))
+
+fwrite(NAICS2007io_to_SCTG, paste(dest_data_dir, "NAICS2007io_to_SCTG.csv", sep=""))
+
+
+### create4d specifically for afreight
+
+industry_10_5 - added to replace "Add 5 level industry classification" R code in firm_sim_enumerate
