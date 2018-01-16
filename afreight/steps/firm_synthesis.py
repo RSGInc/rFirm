@@ -40,8 +40,12 @@ def firm_sim_load_firms(NAICS2012_to_NAICS2007):
 
     firms = read_table('firms_establishments', table_list['firms_establishments'], data_dir)
 
-    # - convert the naics2012 to naics2007
+    # FIXME for regression
+    firms = firms.sort_index()
 
+    # - convert any naics2012 to naics2007
+    # FIXME the firms_establishments table has inconsistent naics codes (mixed 2007 and 2013 codes)
+    # this is presumably an error in the preprocessing step that creates the table
     is_naics_2012 = ~firms.naics.isin(NAICS2012_to_NAICS2007.NAICS2007)
     assert firms[is_naics_2012].naics.isin(NAICS2012_to_NAICS2007.NAICS2012).all()
 
@@ -52,15 +56,17 @@ def firm_sim_load_firms(NAICS2012_to_NAICS2007):
     map_2012_to_2007 = map_2012_to_2007[~map_2012_to_2007.NAICS2012.duplicated()]
     map_2012_to_2007 = map_2012_to_2007.set_index('NAICS2012').NAICS2007
 
-    # - replace not_naics2007 with mapped values
-    firms.loc[is_naics_2012, 'naics'] = reindex(map_2012_to_2007, firms.naics[is_naics_2012])
+    # replace not_naics2007 with mapped values
+    firms['NAICS2007'] = firms.naics
+    firms.loc[is_naics_2012, 'NAICS2007'] = \
+        reindex(map_2012_to_2007, firms.NAICS2007[is_naics_2012])
 
     # all naics should now be NAICS2007
-    assert firms.naics.isin(NAICS2012_to_NAICS2007.NAICS2007).all()
+    assert firms.NAICS2007.isin(NAICS2012_to_NAICS2007.NAICS2007).all()
 
-    firms['NAICS2007'] = firms.naics
+    # make sure nobody is using this unawares
+    firms.rename(columns={'naics': 'pnaics'}, inplace=True)
 
-    assert ~firms.NAICS2007.isnull().any()
     assert firms.index.is_unique
 
     return firms
@@ -81,7 +87,8 @@ def firm_sim_enumerate(
 
     # - Look up NAICS2007io classifications
     firms['NAICS6_make'] = reindex(NAICS2007_to_NAICS2007io.NAICSio, firms.NAICS2007)
-    assert ~firms.NAICS6_make.isnull().any()
+    if firms.NAICS6_make.isnull().any():
+        logger.error("%s null NAICS6_make codes in firms" % firms.NAICS6_make.isnull().sum())
 
     # - Derive 2, 3, and 4 digit NAICS codes
     firms['n4'] = (firms.NAICS2007 / 100).astype(int)
@@ -110,9 +117,16 @@ def firm_sim_enumerate(
         print "\nnon matching industry_10 codes\n", unmatched_industry_10
         firms.industry10.fillna('', inplace=True)
 
+    assert firms.index.is_unique
+
+    return firms
+
+
+def firm_sim_taz_allocation(firms, naics_empcat):
+
+    # most of the R code serves no purpose when there is only one level of TAZ
+
     # - Assign the model employment category to each firm
-    # - NOTE this functionality was in firm_synthesis_tazallocation,
-    # which serves no other purpose when there is only one level of TAZ
     firms['model_emp_cat'] = reindex(naics_empcat.model_emp_cat, firms.n3)
     # backstop missing n3 empcats with n2
     firms.model_emp_cat.fillna(reindex(naics_empcat.model_emp_cat, firms.n2), inplace=True)
@@ -139,19 +153,11 @@ def scale_cbp_to_se(employment, firms):
     # - Scale employees in firms table and bucket round
     # FIXME any reason not to replace bucket round with target round
     firms.adjustment = firms.adjustment.fillna(1.0)  # adjustment factor of 1.0 has no effect
-    firms.adjustment = firms.emp * firms.adjustment
-    firms.emp = bucket_round(firms.adjustment.values)
+    firms.emp = firms.emp * firms.adjustment
+    firms.emp = bucket_round(firms.emp.values)
 
     del firms['adjustment']
     del employment['adjustment']
-
-    # - drop firms with no employees
-    # FIXME all international (TAZ=0) firms have 0 employees?
-    if (firms.emp == 0).any():
-        n0 = firms.shape[0]
-        firms = firms[firms.emp > 0]
-        n1 = firms.shape[0]
-        logger.info('Dropped %s out of %s no-emp firms' % (n0 - n1, n0))
 
     return firms
 
@@ -178,9 +184,12 @@ def firm_sim_scale_employees(
 
     # columns that firm_sim_scale_employees_taz (allegedly) expects in firms
     region_firm_cols = \
-        ['TAZ', 'county_FIPS', 'state_FIPS', 'FAF4', 'naics', 'n4', 'n3', 'n2',
-         'NAICS6_make', 'industry10', 'industry5', 'model_emp_cat', 'esizecat', 'emp']
-    firms = firms[region_firm_cols]
+        ['TAZ', 'county_FIPS', 'state_FIPS', 'FAF4', 'NAICS2007', 'n4', 'n3', 'n2',
+         'NAICS6_make', 'industry10', 'ind'
+                                      'ustry5', 'model_emp_cat', 'esizecat', 'emp']
+    firms = firms[region_firm_cols].copy()
+    MAX_BUS_ID = firms.index.max()
+    logger.info("assigning new firm indexes starting above MAX_BUS_ID %s" % (MAX_BUS_ID,))
 
     # - Compare employment between socio-economic input (SE) and synthetized firms (CBP)
 
@@ -195,6 +204,7 @@ def firm_sim_scale_employees(
 
     # FIXME should we leave this nan to distinguish zero counts from missing data?
     employment.emp_SE.fillna(0, inplace=True)
+    employment.emp_CBP.fillna(0, inplace=True)
 
     # drop rows where both employment sources say there should be no employment in empcat
     employment = employment[~((employment.emp_SE == 0) & (employment.emp_CBP == 0))]
@@ -207,7 +217,16 @@ def firm_sim_scale_employees(
     # Note: if difference is 0, no action required --> Adjustment factor will be 1:
 
     # - Case 1 and 3: scale the number of employees without creating any firms
+
     firms = scale_cbp_to_se(employment, firms)
+
+    # - drop firms with no employees
+    # FIXME all international (TAZ=0) firms have 0 employees?
+    if (firms.emp == 0).any():
+        n0 = firms.shape[0]
+        firms = firms[firms.emp > 0]
+        n1 = firms.shape[0]
+        logger.info('Dropped %s out of %s no-emp firms' % (n0 - n1, n0))
 
     # - Case 2: create new n new firms where n is employees_needed / avg_number_employees_per_firm
 
@@ -225,28 +244,33 @@ def firm_sim_scale_employees(
     firms_needed['avg_emp'] = reindex(empcat_avg_emp, firms_needed.model_emp_cat)
 
     # Employment Category Absent from CBP
-    emp_cats_absent_from_cbp = firms_needed.model_emp_cat[firms_needed.avg_emp.isnull()].unique()
+    emp_cats_not_in_firms = firms_needed.model_emp_cat[firms_needed.avg_emp.isnull()].unique()
+    if emp_cats_not_in_firms:
+        logger.warn("%s emp_cats_not_in_firms: %s" %
+                    (len(emp_cats_not_in_firms), emp_cats_not_in_firms))
 
     DEFAULT_AVG_EMP = 10  # FIXME magic constant
     firms_needed.avg_emp.fillna(DEFAULT_AVG_EMP, inplace=True)
 
     # - number of firms to be sampled is employees_needed / avg_number_employees_per_firm
     assert (firms_needed.emp_CBP == 0).all()
-    firms_needed['n'] = (firms_needed.emp_SE / firms_needed.avg_emp).clip(lower=1).round().astype(
-        int)
+    firms_needed['n'] = \
+        (firms_needed.emp_SE / firms_needed.avg_emp).clip(lower=1).round().astype(int)
 
     prng = pipeline.get_rn_generator().get_global_rng()
     new_firms = []
     for emp_cat, emp_cat_firms_needed in firms_needed.groupby('model_emp_cat'):
 
+        n = emp_cat_firms_needed.n.sum()
+
         # if emp_cat not in firms.model_emp_cat.values:
-        if emp_cat in emp_cats_absent_from_cbp:
-            logger.warn('Skipping model_emp_cat %s not found in cbp' % emp_cat)
+        if emp_cat in emp_cats_not_in_firms:
+            logger.warn('Skipping model_emp_cat %s not found in firms' % emp_cat)
             continue
 
         new_firm_ids = prng.choice(
             a=firms[firms.model_emp_cat == emp_cat].index.values,
-            size=emp_cat_firms_needed.n.sum(),
+            size=n,
             replace=True)
 
         df = pd.DataFrame({
@@ -259,14 +283,11 @@ def firm_sim_scale_employees(
     new_firms = pd.concat(new_firms)
 
     # Look up the firm attributes for these new firms (from the ones they were created from)
-    new_firms = new_firms.merge(right=firms, left_on='old_bus_id', right_index=True)
+    new_firms = pd.merge(left=new_firms, right=firms, left_on='old_bus_id', right_index=True)
 
     del new_firms['old_bus_id']
-
     del new_firms['TAZ']
     new_firms.rename(columns={'new_TAZ': 'TAZ'}, inplace=True)
-
-    print new_firms.columns.values
 
     # - Update the County and State FIPS and FAF zones
     new_firms.state_FIPS = reindex(taz_fips.state_FIPS, new_firms.TAZ)
@@ -275,7 +296,7 @@ def firm_sim_scale_employees(
 
     # - Give the new firms new, unique business IDs
     new_firms.reset_index(drop=True, inplace=True)
-    new_firms.index = new_firms.index + firms.index.max() + 1
+    new_firms.index = new_firms.index + MAX_BUS_ID + 1
     new_firms.index.name = firms.index.name
 
     # - scale/bucket round to ensure that employee counts of the new firms matche the SE data
@@ -298,14 +319,29 @@ def firm_sim_scale_employees(
     for emp_cat in firms_needed.model_emp_cat.unique():
         n_needed = firms_needed[firms_needed.model_emp_cat == emp_cat].n.sum()
         n_created = (new_firms.model_emp_cat == emp_cat).sum()
-
         if n_needed != n_created:
             logger.warn("model_emp_cat %s needed %s, created %s" % (emp_cat, n_needed, n_created))
+    logger.info("firm_sim_scale_employees %s original firms %s new firms" %
+                (firms.shape[0], new_firms.shape[0]))
 
     # Combine the original firms and the new firms
-    firms = pd.concat([firms, new_firms])
+    firms = pd.concat([firms, new_firms]).sort_index()
+    assert firms.index.is_unique  # index (bus_id) should be unique
 
     assert not (firms.emp < 1).any()
+
+    # - error check: firms employmeent should match emp_SE for all taz and emp_cats
+    t0 = print_elapsed_time()
+    summary = pd.merge(
+        left=firms.groupby(['TAZ', 'model_emp_cat'])['emp'].sum().to_frame('emp_firms'),
+        right=employment.set_index(['TAZ', 'model_emp_cat']),
+        left_index=True, right_index=True, how='outer'
+    ).reset_index()
+    # ignore emp_cats not present in firms
+    summary = summary[~summary.model_emp_cat.isin(emp_cats_not_in_firms)]
+    summary.emp_firms.fillna(0, inplace=True)
+    assert (summary.emp_firms == summary.emp_SE).all()
+    t0 = print_elapsed_time("error check firm_sim_scale_employees results", t0, debug=True)
 
     # Recode employee counts into categories
     firms['esizecat'] = \
@@ -315,12 +351,10 @@ def firm_sim_scale_employees(
                include_lowest=True).astype(int)
     assert not firms.esizecat.isnull().any()
 
-    assert firms.index.is_unique
-
     return firms
 
 
-def firm_sim_simulate_production_commodities(
+def firm_sim_assign_SCTG(
         firms,
         NAICS2007io_to_SCTG):
     """
@@ -378,8 +412,8 @@ def firm_sim_simulate_production_commodities(
     # commodity for them based on probability thresholds for multiple commodities
     keymaps = [
         # TODO: are these the right correspodences given the I/O data for the current project?
-        KeyMap('naics', 211111, 'SCTG', (16L, 19L),      (.45, .55)),       # Crude Petroleum and Natural Gas Extraction: Crude petroleum; Coal and petroleum products, n.e.c.            # nopep8
-        KeyMap('naics', 324110, 'SCTG', (17L, 18L, 19L), (.25, .25, .50)),  # Petroleum Refineries: Gasoline and aviation turbine fuel; Fuel oils; Coal and petroleum products, n.e.c.    # nopep8
+        KeyMap('NAICS2007', 211111, 'SCTG', (16L, 19L),      (.45, .55)),       # Crude Petroleum and Natural Gas Extraction: Crude petroleum; Coal and petroleum products, n.e.c.            # nopep8
+        KeyMap('NAICS2007', 324110, 'SCTG', (17L, 18L, 19L), (.25, .25, .50)),  # Petroleum Refineries: Gasoline and aviation turbine fuel; Fuel oils; Coal and petroleum products, n.e.c.    # nopep8
                                                                                                                                                                                           # nopep8
         KeyMap('n4', 4233, 'SCTG', (10L, 11L, 12L, 25L, 26L), (0.10, 0.10, 0.60, 0.10, 0.10)),  # Lumber and Other Construction Materials Merchant Wholesalers                            # nopep8
         KeyMap('n4', 4235, 'SCTG', (13L, 14L, 31L, 32L), (0.25, 0.25, 0.25, 0.25)),             # Metal and Mineral (except Petroleum) Merchant Wholesalers                               # nopep8
@@ -457,10 +491,9 @@ def firm_sim_types(firms):
     firms['maker'] = False
     firms.loc[makers.index, 'maker'] = True
 
-    logger.info('%s firms, %s producers, %s makers' %
-                (firms.shape[0], firms.maker.sum(), firms.producer.sum()))
-
-    return firms
+    return firms[['state_FIPS', 'county_FIPS', 'FAF4', 'TAZ', 'SCTG', 'NAICS2007', 'NAICS6_make',
+                  'industry10', 'industry5', 'model_emp_cat', 'esizecat', 'emp',
+                  'warehouse', 'producer', 'maker']].copy()
 
 
 def firm_sim_iopairs(firms, io_values, NAICS2007io_to_SCTG):
@@ -714,20 +747,25 @@ def firm_sim_producers(firms, io_values, unitcost):
     io_values = io_values[io_values.NAICS6_make.isin(producers.NAICS6_make.unique())]
 
     # - For each output, select only the most important input commodities
-    # Calculate cumulative pct value of the consumption inputs by output commodity
+
+    # FIXME sort and goupby need to be in synch - but which is it????
+    # - setkey(InputOutputValues, NAICS6_Make, ProVal)
     io_values = io_values.sort_values(by=['NAICS6_use', 'pro_val'])
+
+    # Calculate cumulative pct value of the consumption inputs grouped by output commodity
+    # - InputOutputValues[, CumPctProVal := cumsum(ProVal)/sum(ProVal), by = NAICS6_Use]
     io_values['cum_pro_val'] = io_values.groupby('NAICS6_use')['pro_val'].transform('cumsum')
     io_values['cum_pct_pro_val'] = \
         io_values['cum_pro_val'] / io_values.groupby('NAICS6_use')['cum_pro_val'].transform('last')
 
-    # select i/o commodities with highest pro_val for each NAICS6_use output
+    # select NAICS6_make input commodities with highest pro_val for each NAICS6_use output
     io_values = io_values[io_values.cum_pct_pro_val > (1 - base_variables.BASE_PROVALTHRESHOLD)]
 
     # FIXME - use factors?
     # InputOutputValues[,NAICS6_Make:=factor(NAICS6_Make,levels = levels(Firms$NAICS6_Make))]
     # InputOutputValues[,NAICS6_Use:=factor(NAICS6_Use,levels = levels(Firms$NAICS6_Make))]
 
-    # - Calcuate value per employee required for each domestic producer NAICS6_make code
+    # - total number of domestic employees manufacturing NAICS6_make commodity
     producer_emp_counts_by_naics = \
         producers[~producers.state_FIPS.isnull()][['NAICS6_make', 'emp']].\
         groupby('NAICS6_make')['emp'].sum()
@@ -735,21 +773,21 @@ def firm_sim_producers(firms, io_values, unitcost):
     # - annotate input_output_values with total emp count for producers of NAICS6_input
     io_values['emp'] = \
         reindex(producer_emp_counts_by_naics, io_values.NAICS6_make)
+
+    # FIXME why are we summing emp again?
+    # InputOutputValues <- InputOutputValues[,.(ProVal=sum(ProVal), Emp = sum(Emp)), .(NAICS6_Make)]
+    io_values = io_values[['NAICS6_make', 'pro_val', 'emp']].groupby('NAICS6_make').sum()
+
+    # InputOutputValues[, ValEmp := ProVal/Emp]
     io_values['val_emp'] = io_values.pro_val / io_values.emp
 
     t0 = print_elapsed_time("io_values", t0, debug=True)
 
-    # - inner join sample_firms with the top inputs required to produce firm's product
-    # pairs is a list of firms with one row for every major commodity the firm consumes
-    # pairs.NAICS6_use is the commodity the firm PRODUCES
-    # pairs.NAICS6_make is a commodity that the firm CONSUMES
-    producers = pd.merge(left=producers.reset_index(),
-                         right=io_values[['NAICS6_use', 'NAICS6_make', 'val_emp']],
-                         left_on='NAICS6_make', right_on='NAICS6_make', how='inner')
+    producers = pd.merge(left=producers.reset_index(), right=io_values[['val_emp']],
+                         left_on='NAICS6_make', right_index=True, how='inner')
 
     # compute producer commodity value
     producers['prod_val'] = producers.val_emp * producers.emp
-
     producers['unit_cost'] = reindex(unitcost.unit_cost, producers.SCTG)
     producers['prod_cap'] = producers.prod_val * 1E6 / producers.unit_cost
 
@@ -761,8 +799,8 @@ def firm_sim_producers(firms, io_values, unitcost):
     producers.rename(columns=col_map, inplace=True)
 
     producer_cols = \
-        ['seller_id', 'TAZ', 'county_FIPS', 'state_FIPS', 'FAF4', 'n4', 'n3', 'n2',
-         'NAICS', 'size', 'SCTG', 'NAICS6_use', 'non_transport_unit_cost', 'output_capacity_tons']
+        ['seller_id', 'TAZ', 'county_FIPS', 'state_FIPS', 'FAF4',
+         'NAICS', 'size', 'SCTG', 'non_transport_unit_cost', 'output_capacity_tons']
     producers = producers[producer_cols]
 
     # FIXME is this supposed to duplicate or rename?
@@ -937,6 +975,8 @@ def firm_sim_summary(output_dir, producers, consumers, firms, firm_pref_weights)
     firms_sum = collections.OrderedDict()
 
     firms_sum['firms'] = firms.shape[0]
+    firms_sum['firms.producer'] = firms.producer.sum()
+    firms_sum['firms.maker'] = firms.producer.sum()
     firms_sum['employment'] = firms.emp.sum()
 
     # - firms_emp_by_sctg
@@ -974,7 +1014,7 @@ def firm_sim_summary(output_dir, producers, consumers, firms, firm_pref_weights)
 
     # - consumers
 
-    firms_sum['consumers'] = consumers.buyer_id.nunique()
+    firms_sum['consumers_unique'] = consumers.buyer_id.nunique()
     firms_sum['consumption_pairs'] = consumers.shape[0]
     firms_sum['threshold'] = base_variables.BASE_PROVALTHRESHOLD
     firms_sum['consumer_inputs'] = consumers.purchase_amount_tons.sum()
@@ -1009,6 +1049,12 @@ def firm_sim_summary(output_dir, producers, consumers, firms, firm_pref_weights)
     summary.to_csv(os.path.join(output_dir, "firm_sim_summary.csv"), index=False)
 
 
+def regress(df, step_name, df_name):
+
+    file_path = 'regression_data/results/%s/outputs/x_%s.csv' % (step_name, df_name)
+    df.to_csv(file_path, index=True)
+
+
 @inject.step()
 def firm_synthesis(
         output_dir,
@@ -1027,6 +1073,10 @@ def firm_synthesis(
         unitcost,
         firm_pref_weights
 ):
+
+    REGRESS = False
+    TRACE_TAZ = None
+
     t0 = print_elapsed_time()
 
     NAICS2012_to_NAICS2007 = NAICS2012_to_NAICS2007.to_frame()
@@ -1046,10 +1096,21 @@ def firm_synthesis(
 
     t0 = print_elapsed_time("load dataframes", t0, debug=True)
 
+    # - firm_sim_load_firms
+    t0 = print_elapsed_time()
     firms = firm_sim_load_firms(
         NAICS2012_to_NAICS2007)
     t0 = print_elapsed_time("firm_sim_load_firms", t0, debug=True)
 
+    if REGRESS:
+        # use uncorrected naics for regression
+        logger.warn("using uncorrected firms.naics codes for regression")
+        firms.NAICS2007 = firms.pnaics
+
+    logger.info("%s firms" % (firms.shape[0],))
+
+    # - firm_sim_enumerate
+    t0 = print_elapsed_time()
     firms = firm_sim_enumerate(
         firms,
         NAICS2007_to_NAICS2007io,
@@ -1059,6 +1120,26 @@ def firm_synthesis(
         naics_empcat)
     t0 = print_elapsed_time("firm_sim_enumerate", t0, debug=True)
 
+    logger.info("%s null NAICS_make in firms" % (firms.NAICS6_make.isnull().sum(),))
+
+    if REGRESS:
+        regress(df=firms, step_name='firm_sim_enumerate', df_name='Firms')
+
+    # - firm_sim_taz_allocation
+    t0 = print_elapsed_time()
+    firms = firm_sim_taz_allocation(
+        firms,
+        naics_empcat)
+    t0 = print_elapsed_time("firm_sim_taz_allocation", t0, debug=True)
+
+    if REGRESS:
+        regress(df=firms, step_name='firm_sim_tazallocation', df_name='Firms')
+    if TRACE_TAZ is not None:
+        print "\nfirm_sim_tazallocation TRACE_TAZ %s firms\n" % \
+              TRACE_TAZ, firms[firms.TAZ == TRACE_TAZ][['TAZ', 'model_emp_cat', 'emp']].sort_index()
+
+    # - firm_sim_scale_employees
+    t0 = print_elapsed_time()
     firms = firm_sim_scale_employees(
         firms,
         employment_categories,
@@ -1068,21 +1149,61 @@ def firm_synthesis(
         socio_economics_taz)
     t0 = print_elapsed_time("firm_sim_scale_employees", t0, debug=True)
 
-    firms = firm_sim_simulate_production_commodities(
+    if REGRESS:
+        regress(df=firms, step_name='firm_sim_scale_employees', df_name='Firms')
+    if TRACE_TAZ is not None:
+        print "\nfirm_sim_scale_employees TRACE_TAZ %s firms\n" % \
+              TRACE_TAZ, firms[firms.TAZ == TRACE_TAZ][['TAZ', 'NAICS2007', 'NAICS6_make', 'emp']]
+
+    # - firm_sim_assign_SCTG
+    t0 = print_elapsed_time()
+    firms = firm_sim_assign_SCTG(
         firms,
         NAICS2007io_to_SCTG)
-    t0 = print_elapsed_time("firm_sim_simulate_production_commodities", t0, debug=True)
+    t0 = print_elapsed_time("firm_sim_assign_SCTG", t0, debug=True)
 
+    logger.debug("%s firms with null SCTG" % firms.SCTG.isnull().sum())
+    logger.debug("%s firms with null NAICS6_make" % firms.NAICS6_make.isnull().sum())
+
+    if REGRESS:
+        regress(df=firms, step_name='firm_sim_sctg', df_name='Firms')
+    if TRACE_TAZ is not None:
+        print "\nfirm_sim_assign_SCTG TRACE_TAZ %s firms\n" % \
+              TRACE_TAZ, firms[firms.TAZ == TRACE_TAZ][['TAZ', 'NAICS2007', 'NAICS6_make', 'SCTG']]
+
+    # - firm_sim_types
+    t0 = print_elapsed_time()
     firms = firm_sim_types(
         firms)
     t0 = print_elapsed_time("firm_sim_types", t0, debug=True)
 
-    firm_input_output_pairs = firm_sim_iopairs(
+    logger.info('%s firms, %s producers, %s makers' %
+                (firms.shape[0], firms.producer.sum(), firms.maker.sum()))
+
+    if REGRESS:
+        regress(df=firms, step_name='firm_sim_types', df_name='Firms')
+    if TRACE_TAZ is not None:
+        print "\nfirm_sim_types TRACE_TAZ %s firms\n" % \
+              TRACE_TAZ, firms[firms.TAZ == TRACE_TAZ][['TAZ', 'SCTG', 'producer', 'maker']]
+
+    # - firm_sim_iopairs
+    t0 = print_elapsed_time()
+    firm_io_pairs = firm_sim_iopairs(
         firms,
         input_output_values,
         NAICS2007io_to_SCTG)
     t0 = print_elapsed_time("firm_sim_iopairs", t0, debug=True)
 
+    logger.info('%s firm_sim_iopairs' % (firm_io_pairs.shape[0], ))
+
+    if REGRESS:
+        regress(df=firm_io_pairs, step_name='firm_sim_iopairs', df_name='iopairs')
+    if TRACE_TAZ is not None:
+            print "\nfirm_sim_iopairs TRACE_TAZ %s firm_input_output_pairs\n" % \
+                  TRACE_TAZ, firm_io_pairs[firm_io_pairs.TAZ == TRACE_TAZ].sort_values('bus_id')
+
+    # - firm_sim_producers
+    t0 = print_elapsed_time()
     producers = firm_sim_producers(
         firms,
         input_output_values,
@@ -1090,28 +1211,47 @@ def firm_synthesis(
     )
     t0 = print_elapsed_time("firm_sim_producers", t0, debug=True)
 
+    logger.info('%s producers' % (producers.shape[0], ))
+
+    if REGRESS:
+        regress(df=producers, step_name='firm_sim_producers', df_name='producers')
+
+    # - firm_sim_consumers
+    t0 = print_elapsed_time()
     consumers = firm_sim_consumers(
         firms,
-        firm_input_output_pairs,
+        firm_io_pairs,
         unitcost,
         firm_pref_weights)
     t0 = print_elapsed_time("firm_sim_consumers", t0, debug=True)
 
+    logger.info('%s consumers' % (consumers.shape[0], ))
+
+    if REGRESS:
+        regress(df=consumers, step_name='firm_sim_consumers', df_name='consumers')
+
+    # - firm_sim_naics_set
+    t0 = print_elapsed_time()
     matches_naics, naics_set = firm_sim_naics_set(
         producers,
         consumers)
     t0 = print_elapsed_time("firm_sim_naics_set", t0, debug=True)
 
+    if REGRESS:
+        regress(df=naics_set, step_name='firm_sim_naics_set', df_name='naics_set')
+
+    # - firm_sim_summary
+    t0 = print_elapsed_time()
     firm_sim_summary(
         output_dir,
         producers,
         consumers,
         firms,
         firm_pref_weights)
-    t0 = print_elapsed_time("firm_sim_enumerate", t0, debug=True)
+    t0 = print_elapsed_time("firm_sim_summary", t0, debug=True)
 
     inject.add_table('firms_establishments', firms)
-    inject.add_table('firm_input_output_pairs', firm_input_output_pairs)
+    inject.add_table('firm_io_pairs', firm_io_pairs)
     inject.add_table('producers', producers)
     inject.add_table('consumers', consumers)
     inject.add_table('matches_naics', matches_naics)
