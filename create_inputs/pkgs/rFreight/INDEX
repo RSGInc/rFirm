@@ -1,0 +1,61 @@
+FIPS.XXXXx              Federal Information Processing Standard (FIPS)
+                        Dated Codes
+NAICS2002               2002 North American Industry Classification
+                        System (NAICS) Codes
+NAICS2002_to_NAICS2007
+                        2002 to 2007 NAICS Code Crosswalk
+NAICS2007               2007 North American Industry Classification
+                        System (NAICS) Codes
+NAICS2007_to_NAICS2002
+                        2007 to 2002 NAICS Code Crosswalk
+NAICS2007_to_NAICS2007io
+                        2007 NAICS to 2007 NAICSio Code Crosswalk
+NAICS2007_to_NAICS2012
+                        2007 to 2012 NAICS Code Crosswalk
+NAICS2007io             2007 Bureau of Economic Analysis Industry
+                        Classification (NAICSio) Codes
+NAICS2007io_to_SCTG     2007 NAICSio Industry Production SCTG
+                        Commodities
+NAICS2012               North American Industry Classification System
+                        (NAICS) Codes
+NAICS2012_to_NAICS2007
+                        2012 to 2007 NAICS Code Crosswalk
+SCTGCodes               Standard Classification of Transported Goods
+                        (SCTG) Codes
+as.mam                  Coerce to Minutes-After-Midnight (MAM)
+bucketRound             Bucket-round a numeric vector.
+convertDegRad           Convert decimal degress to radians
+convertSkimToMat        Efficient Conversion of Skim List to Matrix
+copyTemplate            Copy a Template File
+corresp_naics6_n6io_sctg
+                        Correspondence between NAICS 6, NAICS IO, and
+                        SCTG Codes
+createAppTemplate       Create rFreight application folder structure
+gcdHaversine            Great Circle Distances using Haversine Formula
+getFIPS                 Get a FIPS 'data.table' by Date
+getGlobalVars           Get Global Variables
+getSkimTOD              Classify Minutes-After-Midnight (MAM) into
+                        Skims Time-of-Day Period
+initializeApp           Intialize an rFreight Application Run
+joinSkimTables          Combine Multiple Skim Tables
+loadInputs              Load a set of input files to objects
+loadPackages            Install and load packages
+montecarlo.predict      Monte Carlo Prediction
+pairsGCD                Great Circle Distances for All Row Pairs
+predict_logit           Simulates the application of a logit model,
+                        with calibration
+progressEnd             End Progress Logging
+progressError           Log Errors
+progressStart           Start Progress Logging
+progressUpdate          Log Progress
+rFreight                rFreight-package
+runPMG                  Builds the system call to the PMG application
+                        and runs the application
+run_sim                 Run Simulation
+sample.inclusive        Inclusive Sampling
+saveOutputs             Save a set of objects to .csv files
+saveSummary             Save a set of summary tables
+splitData               Split dataset into chunks
+tidyDataTable           Tidy Up a 'data.table'
+tryFIPS                 Get Possible FIPS 'data.table's
+which.prob              Where is a probability in a CDF?

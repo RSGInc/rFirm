@@ -16,7 +16,7 @@ library(rgdal)
 library(igraph)
 library(Matrix)
 
-
+library(rFreight, lib.loc = "pkgs")
 
 #----------------------------------------------------------------------------------------------
 ## Allocate a single establishment to each firm as its "headquarters" (or only estasblishment)
@@ -204,13 +204,17 @@ FactorToNumeric <- function(x) return(as.numeric(as.character(x))) #end
 
 
 # Load in the example files and correspodences
-setwd("./dev")
-est <- fread("./Data/cbp.establishments_final.csv")
-firm <- fread("./Data/cbp.firms_final.csv")
-esize_fsize <- fread("./Data/corresp_estsize_firmsize.csv")
+est <- fread("outputs/cbp.establishments_final.csv")
+firm <- fread("outputs/cbp.firms_final.csv")
+esize_fsize <- fread("inputs/corresp_estsize_firmsize.csv")
 setkey(esize_fsize, EstablishmentSizeNum, FirmSizeNum)
 
-nfmtaz <- readOGR("../dev/Data/GIS/NUMA Zones","NUMA_Polygon")
+unzip("inputs/NUMA_Polygon.zip")
+nfmtaz <- readOGR(".","NUMA_Polygon")
+file.remove("NUMA_Polygon.shp")
+file.remove("NUMA_Polygon.shx")
+file.remove("NUMA_Polygon.dbf")
+file.remove("NUMA_Polygon.prj")
 NUMAZones <- data.table(nfmtaz@data)
 NUMAZones <- NUMAZones[, .(FID_1, STATEFP1_1, GEOID10_1, LONG = FactorToNumeric(INTPTLON_1), LAT = FactorToNumeric(INTPTLAT_1))]
 TAZDistances <- rFreight::pairsGCD(NUMAZones[,.(FID_1,LONG,LAT)])
@@ -249,12 +253,6 @@ set.seed(151)
 ## 3. Loop through the firm and for each firm select the closest establishment.
 ## 4. Mark the establishments and firms as assigned/selected if matched.
 
-
-## For debugging
-# naics2 <- NAICS2[1]
-# i <- 1
-
-
 # Create a list to store the matched pairs
 naicslist <- list()
 # A vector of 2 digit NAICS code to loop over
@@ -267,15 +265,22 @@ distancethreshold <- c(100,250,500,1000,Inf) # For sub optimal solution to maxim
 est[,n4:=substr(naics,1,4)]
 firm[,n4:=substr(naics,1,4)]
 
+employee_size_categories = 1:12
 
-
+## For debugging/testing
+if (exists("DEBUG")) {
+  if (DEBUG) {
+    print("####### Running DEBUG mode ########")
+    NAICS2 <- NAICS2[1] #use only first
+  } 
+}
 
 # Loop over 2-digit naics to avoid memory issue
 for (naics2 in NAICS2){
   # List to store the results of looping over different size category
   sizelist <- list()
   # Loop over employee size category
-  for (i in 1:12) {
+  for (i in employee_size_categories) {
     print(paste0("NAICS2: ",naics2, " Size: ",i))
     
     estgroup <- estgroups[i] 
@@ -532,7 +537,7 @@ gc()
 for (naics2 in NAICS2){
   sizelist <- list()
   # Loop over employee size category
-  for (i in 1:12) {
+  for (i in employee_size_categories) {
     print(paste0("NAICS2: ",naics2, " Size: ",i))
     
     estgroup <- estgroups[i] 
@@ -881,10 +886,10 @@ allfirms3 <- rbindlist(list(allfirms2,estfirmforeign),use.names = TRUE, fill = T
 
 
 # Save the final table
-fwrite(allfirms3, "./Data/FirmsandEstablishments.csv")
-saveRDS(allfirms3, "./Data/FirmsandEstablishments.rds")
+dir.create("outputs", showWarnings=FALSE)
+fwrite(allfirms3, "outputs/FirmsandEstablishments.csv")
+saveRDS(allfirms3, "outputs/FirmsandEstablishments.rds")
 
-setwd("..")
 
 
 

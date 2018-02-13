@@ -1,28 +1,29 @@
 #-----------------------------------------------------------------------------------
 ## Prepare inputs for Establishment Synthesis
 #-----------------------------------------------------------------------------------
-setwd("dev/")
 
 library(data.table)
-library(RSGFAF, lib.loc = "../lib/pkgs/library/")
-library(rFreight, lib.loc = "../lib/pkgs/library/")
+library(rFreight, lib.loc = "pkgs")
 
 
 # 2014 County Business Patterns Data
 # From BEA website-National County Business Pattern-Number of employees and businesses
 # (by employee size group) by state, county and NAICS (2,3,4,5 and 6 digits)
 # USe 2014 as latest in 2007 NAICS codes, consistent with the Input Output data
-if(!file.exists("Data/CBP/cbp14co.txt")){
-  # Download the file if not exist
-  download.file("ftp://ftp.census.gov/econ2014/CBP_CSV/cbp14co.zip",
-                "./Data/CBP/cbp14co.zip")
-  unzip("./Data/CBP/cbp14co.zip",exdir="./Data/CBP")
-}
-cbp<-fread("./Data/CBP/cbp14co.txt")
+#if(!file.exists("Data/CBP/cbp14co.txt")){
+#  # Download the file if not exist
+#  download.file("ftp://ftp.census.gov/econ2014/CBP_CSV/cbp14co.zip",
+#                "./Data/CBP/cbp14co.zip")
+#  unzip("./Data/CBP/cbp14co.zip",exdir="./Data/CBP")
+#}
+unzip("inputs/cbp14co.zip")
+cbp<-fread("cbp14co.txt")
+file.remove("cbp14co.txt")
 
-data(County_to_FAFZone)   #from the RSGFAF package
-FAF_NUMA    <- fread ("./Data/corresp_taz_faf4.csv")
-FIPS_NUMA   <- fread ("./Data/corresp_taz_fips.csv")
+County_to_FAFZone <- read.csv("inputs/County_to_FAFZone.csv") #from RSGFAF package
+
+FAF_NUMA    <- fread ("inputs/corresp_taz_faf4.csv")
+FIPS_NUMA   <- fread ("inputs/corresp_taz_fips.csv")
 
 cbp <- cbp[grep("[0-9]{6}",naics,100),]
 cbp <- cbp[fipscty != "999",]
@@ -51,7 +52,7 @@ cbp[, emp := NULL]
 
 ##############################################################################
 # Read in the rankings table (output of the LEHD data processing code)
-lehdtazm <- fread("./Data/lehdtazm.csv")
+lehdtazm <- fread("inputs/lehdtazm.csv")
 
 # Enumerate the CBP establishments
 #-----------------------------------------------
@@ -189,5 +190,6 @@ foreign.est[, estid := .I + nrow(cbp.establishments) + nrow(ag.est)]
 cbp.establishments <- rbind(cbp.establishments, ag.est, foreign.est)
 cbp.establishments[, n2 := as.integer(substr(naics, 1, 2))]
 
-fwrite(cbp.establishments, "./Data/cbp.establishments_final.csv")
-setwd("..")
+dir.create("outputs", showWarnings=FALSE)
+fwrite(cbp.establishments, "outputs/cbp.establishments_final.csv")
+

@@ -1,16 +1,13 @@
 #-----------------------------------------------------------------------------------
 ## Prepare inputs for Firm Synthesis
 #-----------------------------------------------------------------------------------
-setwd("dev/")
 
 #-----------------------------------------------------------------------------------
 ## Load libraries for Firm Synthesis
 #-----------------------------------------------------------------------------------
 
-
 library(data.table)
-library(RSGFAF, lib.loc = "./../lib/pkgs/library/")
-library(rFreight, lib.loc = "./../lib/pkgs/library/")
+library(rFreight, lib.loc = "pkgs")
 
 #Inputs
 #------
@@ -19,20 +16,22 @@ library(rFreight, lib.loc = "./../lib/pkgs/library/")
 # From BEA website-National County Business Pattern-Number of employees and businesses
 # (by employee size group) by state, county and NAICS (2,3,4,5 and 6 digits)
 # USe 2014 as latest in 2007 NAICS codes, consistent with the Input Output data
-if(!file.exists("Data/CBP/cbp14co.txt")){
-  # Download the file if not exist
-  download.file("ftp://ftp.census.gov/econ2014/CBP_CSV/cbp14co.zip",
-                "./Data/CBP/cbp14co.zip")
-  unzip("./Data/CBP/cbp14co.zip",exdir="./Data/CBP")
-}
-cbp<-fread("./Data/CBP/cbp14co.txt")
+#if(!file.exists("Data/CBP/cbp14co.txt")){
+#  # Download the file if not exist
+#  download.file("ftp://ftp.census.gov/econ2014/CBP_CSV/cbp14co.zip",
+#                "./Data/CBP/cbp14co.zip")
+#  unzip("./Data/CBP/cbp14co.zip",exdir="./Data/CBP")
+#}
+unzip("inputs/cbp14co.zip")
+cbp<-fread("cbp14co.txt")
+file.remove("cbp14co.txt")
 
 #correspondece between FAF zones and counties
-data(County_to_FAFZone)   #from the RSGFAF package
+County_to_FAFZone <- read.csv("inputs/County_to_FAFZone.csv") #from RSGFAF package
 
 #correspondece between FAF zones and Model TAZs (NUMA Zones)
-FAF_NUMA    <- fread ("./Data/corresp_taz_faf4.csv")
-FIPS_NUMA   <- fread ("./Data/corresp_taz_fips.csv")  #TAZs that have two counties inside them : (304,823,828,1432,4381,4568) ##TODO:Check this?
+FAF_NUMA    <- fread ("inputs/corresp_taz_faf4.csv")
+FIPS_NUMA   <- fread ("inputs/corresp_taz_fips.csv")  #TAZs that have two counties inside them : (304,823,828,1432,4381,4568) ##TODO:Check this?
 
 FIPS_NUMA[is.na(FIPS_NUMA)] <- 0
 
@@ -70,7 +69,7 @@ cbp <- cbp[, .(emp=sum(emp),est=sum(est),e1=sum(n1_4,n5_9,n10_19),e2=sum(n20_49,
                by = .(naics, TAZ, CountyFIPS, StateFIPS, FAF4)][order(TAZ,naics)]
 
 #Read-in the SUSB National Firms Data
-SUSB_F <- fread("./Data/SUSB_Firms.csv")
+SUSB_F <- fread("inputs/SUSB_Firms.csv")
 SUSB_F[is.na(SUSB_F)] <- 0    #sum(colSums(SUSB_F[,-1])) [1] 5,930,979
 
 #Merge SUSB with CBP
@@ -98,7 +97,7 @@ cbp[, emp := NULL]
 
 ##############################################################################
 # Read in the rankings table (output of the LEHD data processing code) and the processed cbp table
-lehdtazm <- fread("./Data/lehdtazm.csv")
+lehdtazm <- fread("inputs/lehdtazm.csv")
 # cbp      <- fread("./Data/cbp.firms.csv")
 
 # Enumerate the CBP firms
@@ -238,5 +237,6 @@ foreignfirms[, firmid := .I + nrow(cbp.firms) + nrow(agfirms)]
 cbp.firms <- rbind(cbp.firms, agfirms, foreignfirms)
 cbp.firms[, n2 := as.integer(substr(naics, 1, 2))]
 
-fwrite(cbp.firms, "./Data/cbp.firms_final.csv")
-setwd("..")
+dir.create("outputs", showWarnings=FALSE)
+fwrite(cbp.firms, "outputs/cbp.firms_final.csv")
+
