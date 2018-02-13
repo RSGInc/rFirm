@@ -1,0 +1,19 @@
+Package: rFreight
+Title: Support for Dissagregate Simulation of Freight Movement
+Version: 0.1-23
+Date: 2017-05-02
+Authors@R: c(person("Colin", "Smith",     email = "colin.smith@rsginc.com",   role = c("aut","cre")),
+             person("Jeff",  "Keller",    email = "jeff.keller@rsginc.com",   role = "ctb"),
+             person("Ben",   "Chaimberg", email = "ben.chaimberg@rsginc.com", role = "ctb"))
+Description: Functions, datasets, and documentation to aid in the development of disaggregate freight movement simulation applications.
+Depends: R (>= 3.1.1)
+Imports: data.table, parallel, tools
+License: GPL-3
+LazyData: true
+Suggests: knitr, rmarkdown
+VignetteBuilder: knitr
+Author: Colin Smith [aut, cre],
+  Jeff Keller [ctb],
+  Ben Chaimberg [ctb]
+Maintainer: Colin Smith <colin.smith@rsginc.com>
+Built: R 3.3.2; ; 2017-05-02 17:53:37 UTC; windows

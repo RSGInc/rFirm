@@ -1,0 +1,106 @@
+rFreight 0.1-23
+* Added argument to initializeApp to avoid reloading rFreight if user specifies (causes problems if user does not have rights to install packages)
+* Removed the writeToExcelTemplate to avoid requiring XLConnect and Java be on a machine (reduces installation complexity)
+
+rFreight 0.1-22
+* Added three functions (convertDegRad, gcdHaversine, and pairsGCD) to allow the calculation of great circle distances for all combinations of point locations in a data.table.
+
+rFreight 0.1-21
+* Added the BASE type of global variables to the getGlobalVars function to support common cross scenario settings
+
+rFreight 0.1-20
+* Modified the splitData algorithm to address a bug, improve speed, and achieve better data balance when f is not null
+* Added the splitData argument 'force' to ensure at least one of a certain type of record is included in each chunk
+* Added the getSkimTOD function
+
+rFreight 0.1-19
+* Added the MAM family of functions for handling minutes-after-midnight data
+* Fixed a bug in loadPackages and initializeApp where new packages were installed to lib but not loaded from lib
+* Added a lib argument to run_sim so workers can load packages from a custom library directory
+
+rFreight 0.1-18
+* Fixed a bug where the column labels in the NAICS2012_to_NAICS2007 table were reversed
+
+rFreight 0.1-17
+* Added the initializeApp function and its documentation
+* Added optional arguments lib and suppressWarnings to loadPackages function
+
+rFreight 0.1-16
+* Added the sample.inclusive function
+* Added the NAICS2002 and NAICS2007 tables, and crosswalks between
+* Added a suppressMessages argument to loadPackages
+* progressError now returns the error that was intercepted and logged
+* Added the NAICS2007io table and documentation
+* Removed erroneous NAICS-to-SCTG tables
+* Added FIPS.XXXXx tables, documentation, and supporting functions
+
+rFreight 0.1-15
+* Fixed bug in SCTGCodes "Description" field
+* Added tidyDataTable function
+* Added the getGlobalVars function
+* run_sim now exports special rFreight global variables by default
+
+rFreight 0.1-14
+* Added the bucketRound function
+* Further clean up of old data and documentation
+
+rFreight 0.1-13
+* joinSkimTables has additional input validation
+* Added table of US counties and FIPS codes (Counties)
+* Added table of SCTG codes (SCTGCodes)
+* Added various NAICS and SCTG crosswalk tables (NAICS2007, NAICS2012, NAICS2007_to_SCTG, NAICS2012_to_SCTG, NAICS2007_to_NAICS2012, NAICS2012_to_NAICS2007)
+
+rFreight 0.1-12
+* Fixed a bug in run_sim that caused inputEnv to be exported twice when k > 1
+
+rFreight 0.1-11
+* Added copyTemplate and writeToExcelTemplate functions
+* Users can specify input variables to exclude in run_sim
+
+rFreight 0.1-10
+* splitData is now roughly twice as fast when f is not NULL
+* splitData will always return a (potentially unbalanced) split dataset when k is equal to the number of groups implied by f
+* splitData performs more rigorous validation of f
+* Fixed a bug in run_sim when FUN is in error and k is 1 where inputEnv is not removed from the search path
+* Added createAppTemplate function
+
+rFreight 0.1-9
+* loadInputs now supports .R files
+
+rFreight 0.1-8
+* Added skim functions: convertSkimToMat, joinSkimTables
+* Users are now able to set random seeds with run_sim
+* Miscellaneous improvements
+
+rFreight 0.1-7
+* Monte Carlo classification is 50% faster
+
+rFreight 0.1-6
+* Added the progressEnd function
+* Removed residual CMAP-specific datasets
+* Removed residual deprecrated progress tracking functions/documentation
+* Current progress tracking functions are more precise in their percent complete values
+* montecarlo.predict corrects for a probability normalization bug in pscl::hurdle models
+
+rFreight 0.1-5
+* run_sim now longer creates an additional worker when k=1
+
+rFreight 0.1-4
+* Added functions for stochastic predict method
+* Added run_sim function to control overall simulation processes
+
+rFreight 0.1-3
+* Added functions for progress and error logging
+
+rFreight 0.1-2
+* addLabels function now includes generic label and segment names
+
+rFreight 0.1-1
+* loadInputs now handles .RData and .RDS file types
+* loadInputs can now specify an environment in which to load inputs (added envir argument)
+* loadInputs can now utilize file-specific arguments for .csv file types (added fread.args argument)
+* loadPackages now supports a vector of packages
+* Other development-related improvements
+
+rFreight 0.1
+* Initial working version of rFreight

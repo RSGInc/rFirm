@@ -1,0 +1,496 @@
+---
+title: "How to Use rFreight"
+author: "<a href='mailto:jeff.keller@rsginc.com?Subject=rFreight' target='_top'>Jeff Keller</a>"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+    css: styles.css
+    number_sections: yes
+    theme: united
+    toc: yes
+    toc_float: yes
+  word_document:
+    toc: yes
+vignette: >
+  %\VignetteIndexEntry{How to Use rFreight}
+  %\VignetteEncoding{UTF-8}
+  %\VignetteEngine{knitr::rmarkdown}
+---
+
+```{r initialize, echo=FALSE}
+
+set.seed(1987)
+suppressPackageStartupMessages(library(data.table))
+suppressPackageStartupMessages(library(rFreight))
+
+```
+
+# Introduction
+
+Welcome to the `rFreight` user guide, _How to Use rFreight_! This document provides developers with guidance and best practices for building applications using the `rFreight` **R** package. `rFreight` is used for building freight movement simulation applications and contains functions, datasets, and documentation to facilitate these ends. While it is designed with freight movement simulations in mind, many functions are generic and may be useful for other purposes, but such uses are not covered here and are left to the reader's imagination.
+
+The guidance and best practices presented in the following serve two primary purposes. The first is to give developers the information they need to build applications consistently and effectively. These are important characteristics of the development process when more than one developer is involved or when the original author invariably needs to revisit the code in the future. The second is to give developers the information they need to build high-performance applications. This primarily means reducing the computation time and memory footprint of the application, but also refers to the flexibility and extendibility of the application, so unforeseen use cases can either be automatically handled or accommodated without much fanfare.
+
+_How to Use rFreight_ provides a detailed account of how and when to use the functions it contains. This differs from the basic documentation that all **R** functions and datasets are required to have (though, `rFreight` also includes this documentation), such as the resulting help page viewed when running `?sum`. This basic documentation provides the low-level technical details, but does not offer the higher level details one typically needs to begin using a package for the first time. For example, what is the intended purpose of a function and when it is best to use one over another? This user guide intends to address this and other documentation gaps.
+
+It is the author's hope that this document is of value to the reader, and that the guidance and best practices offered here are useful in creating freight movement simulation applications that are meaningfull, fast, and accessible to RSG staff and their clients. If any of this document's content is inaccurate or out of date, or if a better method is discovered over time, please reach out to <a href="mailto:jeff.keller@rsginc.com?Subject=How%20to%20Use%20rFreight" target="_top">Jeff Keller</a> so updates to this user guide can be coordinated.
+
+## About This Document
+
+This document is a completely self-contained HTML file viewable from any modern Internet browser. It was written in [R Markdown](http://rmarkdown.rstudio.com/index.html) and is embedded within the `rFreight` package directly. Readers can view this document from **R** by running the following commands or by double-clicking the `.html` directly if it happens to be available. The latter will open this document in the computer's default Internet browser.
+
+```{r open_vignette, eval=FALSE}
+
+library(rFreight)
+vignette("How to Use rFreight")
+
+```
+
+Throughout this document, certain words or phrases may be highlighted `like this`. These are meant to help readers differentiate between authored words like "variables", "files", or "folders", and programming entities such as `variables`, `files`, or `folders`. More complex programming concepts are presented as standalone code blocks such as the one above.
+
+Finally, an interactive table of contents is available at the left-hand side of the document (or top, on mobile devices) and can be used for navigation.
+
+## The **R** Language
+
+Applications involving `rFreight` are typically developed in **R**, an open source programming language, and require intermediate to advanced **R** programming skills. However, **R** is a very connected programming language and may be executed from other languages or software programs such as Python or Microsoft Excel. It is also possible to execute code written in other languages or interact with software programs directly from **R**. This connectedness is a boon, as `rFreight` applications can leverage code modules written in other languages directly, without requiring developers to rewrite code in the **R** language.
+
+At any rate, developers should consider the purpose and end user(s) of their application, and let this information guide the selection of programming language or application medium.
+
+The latest version of **R** can always be downloaded from the [CRAN website](https://cran.r-project.org/).
+
+## Applications, Models, and Simulations
+
+It is important to note that this document, along with the rest of the documentation contained in the `rFreight` package, draws a distinction between three concepts: _applications_, _models_, and _simulations_. In the fast-paced context-rich parlance of industry experts, these three concepts are often collectively referred to as "models". In an attempt to clarify each concept, and to differentiate between them, this document defines these concepts as follows.
+
+* __Models__ are algorithms in which coefficients&mdash;sometimes referred to as parameters&mdash;are estimated from an observed set of independent variables as they pertain to some dependent variable of interest. Such datasets might arise from a designed experiment or survey, or passively observed. The results of this estimation is referred to as the __model object__, and is a collection of model statistics, coefficients, and other supplemental information. A model object might take the form of an __R__ object or a table of coefficients. Regression, Multinomial Logit, and Neural Networks are all examples of __models__.
+
+* __Simulations__ are implementations of one or more models. The results of an estimated model can be used to predict outcomes given some new set of observed independent variables. For example, a simulation of how adults travel to work might include the implementation of a vehicle choice model to simulation their choice of vehicle, then given that vehicle, their choice of route to get to work. Simulations are often stochastic (random), in that each time the simulation is run, new results are obtained. This is because most models make probabilistic predictions. In a vehicle choice model, the chosen vehicle is not known with 100% certainty for a new combination of independent variables, but rather is predicted to be chosen with some likelihood (e.g., 90% car vs. 10% bus).
+
+* __Applications__, as in software applications or programs, are collections of one or more simulations. Applications provide the software infrastructure for preparing the inputs for the simulations contained therein as well as summarizing, plotting, and saving the simulation results. An application also provides a user interface (UI) for interacting with its contents, such as specifying simulation inputs and modifying computational settings. More advanced applications might include a graphical user interface (GUI) for users to interact with the application contents via a modern, visually appealing point-and-click interface that does not require the manual manipulation of code or input files. The application as a whole defines the user experience (UX).
+
+# Application Folder
+
+The application folder should contain all files necessary to running the application. The one exception to this is **R** itself and other supplemental software (e.g., Python), which are almost always installed elsewhere on the user's computer drive. However, this only applies to the base installations of these software supplementals. If for instance, an `rFreight` application calls on a Python script at some point, that Python script should be included within the application folder structure. The application folder itself should be named something descriptive yet concise so as not to be overly verbose.
+
+To leverage all features of the `rFreight` package, applications should be organized consistently according to the standard `rFreight` application structure. The folder structure with key files are depicted below and the folders are described in the following sections. The `createAppTemplate` function is a useful function for generating a fresh application folder and set of starting files and should be used when first beginning development of a new application (rather than copying from an existing application).
+
+**Application Folder Structure**
+
+* `run_model.R`
+* `dev/`
+* `lib/`
+    * `data/`
+    * `scripts/`
+        * `Master.R`
+    * `templates/`
+* `scenarios/`
+    * `base/`
+        * `inputs/`
+        
+```{r createapptemplate, eval=FALSE}
+
+# Create a fresh application template on your desktop
+createAppTemplate(dir = "C:/Users/jeff.keller/Desktop")
+
+```
+        
+Note: The key files `run_model.R` and `Master.R` are described in the [Building and Application](#building-an-application) section.
+
+## Development Folder (`dev`)
+
+The `dev` folder is simply a location within the application folder structure for developers to work on files during development. A common usage of the `dev` folder is to house scripts that produce other application assets, such as datasets, but where these scripts themselves are not apart of the application. For example, a script that downloads and processes a dataset, then copies that dataset into the `lib/data/` folder would be kept in the `dev` folder.
+
+The `dev` folder might also contain files considered to be "in-progess" which are not yet ready to be placed in their final location. In this sense, this folder can be thought of as a workspace for developers to try and test out their work without cluttering key application folders.
+
+However the `dev` folder is utilitized by the developer(s), it is typically not delivered to clients as part of the final application.
+
+## Internal Library (`lib`)
+
+The `lib` folder contains all of the internal assets the application needs to run. This includes datasets, code, and other files.
+
+* `data`&mdash;this folder contains all of the global data inputs the application needs to run. This does not include user-specified inputs, which are stored elsewhere (see [Scenarios Folder](#scenarios-folder-scenarios)). Files contained herein are not limited to a particular format. Typical file formats are `.csv`, `.rds`, `.RData`, and `.txt` but could also include GIS shape files or proprietary file formats. See the section on [Data Best Practices](#data) for more on this subject.
+
+* `scripts`&mdash;this folder contains all of the application's code. Files contained herein will be mostly __R__ scripts (i.e. `.R` files) but may also include code written in other languages for one reason or another (C++, Java, Python). This might be done for computational efficiency, as some languages can be faster than __R__ at certain tasks, or to leverage existing code that happened to be written in another language. See the section on [Building an Application](#building-an-application) for more on this subject.
+
+* `templates`&mdash;this folder contains template files typically used for reporting purposes. These files are distinct from files in the `data` folder in that they are not used as inputs to any of an application's simulations. Instead, template files are typically used by an application as a place to populate summary statistics, maps, and charts for easy consumption. See the section on [Summary Executive Functions](#summary-function) for more on this subject.
+
+## Scenarios Folder (`scenarios`)
+
+The `scenarios` folder
+
+# Building an Application
+
+## The `run_model.R` File
+
+## The `Master.R` File
+
+* Initialization
+* Simulation Components comprised of executive functions
+* Components organized linearly (cumulative)
+
+## Executive Functions
+
+### Process Inputs Function
+
+* `gc()`
+* return table for very first step
+
+### Simulation Function
+
+### Summary Function
+
+* `writeToExcelTemplate`
+* Save main results to RData file
+
+## System, Scenario, and User Variables
+
+* Should never be modified, only set once a the top of Master.R
+* All caps and underscores in name
+* Will always be available inside any function
+
+## Progress Logging
+
+Generally, any time a calculation takes more than a few seconds to complete, it is a good idea to provide the user with some information so that they know it is still working. This is referred to as "progress logging". `rFreight` applications often take a few minutes or more to run, as many calculations are needed to simulate the movement of freight, so logging the progress of the calculation is important to be able to convey its status to the user.
+
+Progressing logging is done with four functions working in concert:
+
+* `progressStart`&mdash;begins the logging process
+* `progressUpdate`&mdash;updates the current status of the calculation
+* `progressError`&mdash;updates the progress log if an error has occurred
+* `progressEnd`&mdash;ends progress logging when a calculation has completed
+
+Each modifies a progress log text file accordingly. This log file is available to users outside of **R** and after a calculation has completed. This log file can be used as an input to other applications, such as a progress bar GUI. (Such a GUI is currently in development and will be included in future releases of `rFreight`.)
+
+Below is an example of how progress is typically logged:
+
+```{r codeexample_progresslog, eval=FALSE}
+
+# Start logging progress
+progressStart(action = "Simulating...", task = "Example")
+
+# ... 1st Calculation ...
+
+progressUpdate(prop = 1/3)
+
+# ... 2nd Calculation ...
+
+progressUpdate(prop = 2/3)
+
+# ... 3rd Calculation ...
+
+progressUpdate(prop = 3/3)
+
+# End logging progress
+progressEnd()
+
+```
+
+Note that after each calculation, the proportion of calculations that have been completed is updated. This proportion is not necessarily known and must be specified by the developer. See the [Completion Percentage](#completion-percentage) section for details on how to best accomplish this.
+
+### Tasks
+
+### Subtasks
+
+### Completion Percentage
+
+Every `rFreight` application is different in scope and approach. Even within a single application, the computational requirements from scenario to scenario are often different, as users are able to specify more or less complex conditions for their scenarios. For these reasons, the number of remaining calculations is not known to the application and it is up to the developer to identify the completion percentage after interim calculation steps using the `progressUpdate` function as described above.
+
+Suppose an `rFreight` application is composed of three main computations, 1) Synthesize Firms, 2) Construct Supply Chain, and 3) Generate Trips. It is best to start by assuming that each computation is one-third of the total computation time. So, the completion percentage after each would be 33%, 67%, and 100%. Once the application has been built and populated with real inputs (which includes calibrated parameters), the completion percentages can then be adjusted to reflect the true relative computation times. To do this, the application is run with progress logging and the resultant log file examined.
+
+Take the following log file for example:
+
+```{r example_logfile, eval=FALSE}
+
+PUT EXAMPLE LOG FILE HERE
+
+```
+
+The recorded time stamps can be used to adjust the completion percentages in the following way:
+
+```{r adjust_progress_pct}
+
+TimeToComplete <- c(5, 25, 20) # seconds
+NewPercentages <- cumsum(TimeToComplete/sum(TimeToComplete))
+NewPercentages
+
+```
+
+In this example, the first computation is quite a bit less than one-third of the computation time. These new percentages should be used when `progressUpdate` is called after each computation to provide the user with a more accurate picture of the computation time remaining at any given point.
+
+### Logging Errors
+
+### Parallel Computing
+
+By default, the log files generated from the progress logging functions are named according to the system process ID. This allows for progress logging of parallel processes running concurrently.
+
+## Commonly Used Datasets
+
+# Debugging and Profiling
+
+* https://support.rstudio.com/hc/en-us/articles/205612627-Debugging-with-RStudio
+* https://support.rstudio.com/hc/en-us/articles/205753617-Code-Diagnostics
+* https://support.rstudio.com/hc/en-us/articles/218221837-Profiling-with-RStudio
+
+# Common Pitfalls
+
+* sampling 1 thing (or number)
+* data type confusion: factor, character, numeric
+* 
+
+# Best Practices
+
+The following sections detail a number of best practices for developing applications using `rFreight`. Such applications can be intense in terms of computation, code complexity, and file storage. Code and files that are self-documenting and "DRY" are critical to the success of rFreight applications from both a user and developer perspective, and tend to produce higher performing applications in terms of speed, flexibility, and accessibility.
+
+In general, it is recommended developers author code with a consistent style to ensure readability and easy transference between developers. Google's [R Style Guide](https://google.github.io/styleguide/Rguide.xml) provides comprehensive guidance on good code style, covering topics such as spacing, indentation, and use of curly braces.
+
+While it is strongly recommended that developers of `rFreight` applications adhere to the conventions detailed in the following sections as often as is feasible, they are not absolute rules and may be modified to suit the needs of a particular project or situation. So long as the spirit of these best practices are followed, the exact implementation need not be defined too strictly.
+
+## Software and Package Versions
+
+## Source Control
+
+* GitHub & LFS (install both; latest versions)
+* How to clone the repository
+* Report issues! Add "TODO: Issue #11"
+* Advanced: Shell commands
+* All else fails: xkcd comic
+
+## Self-Documenting Code
+
+Self-documenting code is an authoring style that produces code that can be followed and understood by those unfamilar with the application or by the original author at a future time when their memory of the application details has faded. It is characterized by detailed code comments and long variable names (e.g., a variable named `TimeOfDay` rather than `x` or `tod`). Self-documenting code and files enable a developer to revisit their application months or years in the future and be better able to navigate the details and nuances of the code without having retained all knowledge of the details since they last worked with it. Similarly, self-documentation facilitates collaboration between developers as they are better able to understand each other's work and intent.
+
+Such an approach also conducive to spotting errors, as the original author's intent is embedded alongside the code or file. Consider the following line of code:
+
+```{r bad_varname, eval=FALSE}
+
+x<-18
+
+```
+
+What is this line trying to do? Is it attempting to test whether `x` is less than -18 or is it attempting to assign 18 to `x`? Regardless of what the code actually does (it assigns 18 to `x`), a reviewer of this code cannot infer the intent of the original author. Now consider the following, self-documenting code:
+
+```{r good_varname, eval=FALSE}
+
+# Establish the age threshold of an adult
+AdultAge<-18
+
+```
+
+The addition of the author's comment and the more descriptive variable name `AdultAge` makes for a more verbose block of code, but the intent is clear. A reviewer is now able to determine that the original author is probably attempting to assign the value 18 to the variable `AdultAge`, as this makes the most sense given the comment. They are then able to test whether the code matches this intent. In this case, it does. Though, better coding style would have white space around the assignment operator `AdultAge <- 18` (see [R Style Guide](https://google.github.io/styleguide/Rguide.xml)).
+
+The following sections provide guidance for naming variables, files, and functions.
+
+### Variable Naming Conventions
+
+Creating names for variables is the most common task an `rFreight` application developer is required to perform. An application may require many dozens or even hundreds of objects to be defined, so having descriptive (but succinct) and consistent (but distinguishable) object names goes a long way toward self-documentation. Object names longer than about 30 characters can become unwieldy to code with, and creating descriptive names with fewer than 30 characters can be challenging at times. With thoughtful consideration, practice, and examples, the challenge is not insurmountable. In all circumstances, an object's name should reflect its contents.
+
+**R** object names are case sensitive and must begin with a letter (i.e. a-z or A-Z), but may otherwise contain numbers (1-9), periods (`.`), and underscores (`_`), even as the last character. However, it is recommended that names be created using [CamelCase](https://en.wikipedia.org/wiki/CamelCase). Each word of the variable name is capitalized rather than being separated with an underscore or period. For example, `ScheduledTrips` is preferred over `scheduledtrips`, `scheduled_trips`, and `scheduled.trips`. Because **R** is case sensitive, a common error to avoid is the miscapitalization of an object name:
+
+```{r name_errors, error=TRUE}
+
+MyVariable <- "Hello World!"
+print(MYVariable) # returns an error
+
+```
+
+Periods are typically reserved to designate an object's structure. For example, `ScheduledTrips.List` and `ScheduledTrips.Matrix` clearly tells us the contents and structure of the data. Underscores are typically reserved for system, scenario, and user variables (see the [System, Scenario, and User Variables](#system-scenario-and-user-variables) section).
+
+It is possible to include non-standard characters in an object name (e.g., `&`, `$`, ` `), by surrounding the name in back-ticks `` `r "\x60\x60"` ``. This should be avoided in most circumstances but can be useful for providing custom variable names to other work flows, such as saving a table to a CSV file or as a shortcut for plotting data with more readable labels:
+
+```{r literal_names}
+
+# Original name
+DollarsPerTon <- 1:10
+
+# Custom name
+`Value per Ton ($)` <- 1:10
+
+par(mfrow = c(1,2))
+plot(DollarsPerTon)
+plot(`Value per Ton ($)`)
+
+```
+
+```{r HIDDEN_cleanup, echo=FALSE}
+par(mfrow = c(1,1))
+
+```
+
+When naming a `data.frame` or `data.table`, its name should reflect the observational unit of its rows. If a dataset contains a list of firms and their attributes (e.g., number of employees, location, etc.), the following names would serve as self-documenting:
+
+```{r good_table_names, eval=FALSE}
+
+# Good Variable Names
+Firms
+Business
+Establishments
+
+```
+
+While these are not:
+
+```{r bad_table_names, eval=FALSE}
+
+# Poor Variable Names
+Bus
+Est
+agents
+
+```
+
+Notice that `agents` is a poor variable name. While individual firms may act as the primary agent in a simulation, the term "agent" on its own is not informative as to what information is contained in the object.
+
+### File Naming Conventions
+
+### Function Naming Conventions
+
+## "DRY" Code
+
+"DRY" code (Don't Repeat Yourself), is a code authoring philosophy that seeks to minimize repeated code. Repeating code invites frustration on the part of developers and users alike, reduces flexibility, and lowers performance. Frustration ensues when errors are discovered in repeated code, and every instance of the repeated code must be corrected, requiring more time to make corrections and possibly introducing errors with each correction (or missing a repeated piece of code that needs to be corrected).
+
+* typing numbers other than 0 or 1
+
+## Data Storage
+
+### Data Types
+
+* characters/numeric twice as large as integer/factor/logical
+* exception: table IDs -> should be integer not factor (unnecessary)
+* Can avoid logical if you want (write out is trickier)
+* ID variables
+* as.integer > 1 vs. as.integer > 1L
+
+## Using the `data.table` Package
+
+The `data.table` package is strongly recommended for building `rFreight` applications. It enables faster and more memory efficient calculations on datasets (called `data.table`s when using the `data.table` package), and the speed and efficiency only increases with the size of the dataset. Given the average size of the datasets used and constructed by the typical `rFreight` application, it is very beneficial and often absolutely critical to implement the simulation code using `data.table` syntax. The following sections provide general guidance and make note of common pitfalls and tips for writing good `data.table` code. See the package help files for more detailed documentation (`help(package = "data.table")` or `?data.table`). Better yet, complete the [data.table course on DataCamp.com](https://www.datacamp.com/courses/data-table-data-manipulation-r-tutorial)
+
+It should first be noted that the primary output of the `data.table` package are objects of class `data.table`. These are simply `data.frame`s in base **R** that have improved methods for subsetting, assignment, grouping, and joining/merging datasets. The most visible of these is the `print` method.
+
+```{r datatable_print_example}
+
+# Create a data.table with 1000 rows
+DT <- data.table(X = 1:1000,
+                 Y = sample(LETTERS, size = 1000, replace = TRUE),
+                 Z = rnorm(1000))
+DT # same as print(DT)
+
+```
+
+Rather than printing up to the first 10,000 rows as `print.data.frame` does, only the first and last five rows are printed by default. Like any function, this behavior can be adjusted by calling the `print` method directly with optional arguments (specifically, `topn` will change the number of rows printed).
+
+This makes examining the contents of a dataset a bit easier, but the real power of `data.table` can be found in the methods for subsetting, assignment, grouping, and joining/merging datasets.
+
+### The Basics: `i`, `j`, `by`
+
+The improved methods included in the `data.table` package are accessed via very different syntax than that used with `data.frame`s in base **R*. Again, please see the package help files for more detailed documentation, but the general format for working in a data.table is the following:
+
+```{r datatable_structure, eval=FALSE}
+
+DT[i, j, by]
+
+```
+
+Where `DT` is a `data.table` object, `i` is row subsetting logic, `j` is a selection or assignment of variables, and `by` is a collection of grouping variables. In each of these, the variables of `DT` can be accessed directly without using strings.
+
+To subset `DT` by `X < 3`:
+
+```{r datatable_subset1}
+
+DT[X < 3]
+
+```
+
+Note that `X` is referred to directly without quotes. Subsetting logic can be as complex as desired and can reference objects outside of `DT`:
+
+```{r datatable_subset2}
+
+myLetters <- c("R", "S", "G")
+DT[X < 50 & Y %in% myLetters]
+
+```
+
+To select just the `X` and `Y` columns from `DT`, a list of variables is provided in `j`. Note that in `data.table`, the `.` is an alias for the `list` function and should be used when readability is required (almost always):
+
+```{r datatable_select}
+
+DT[, .(X, Y)]
+
+```
+
+Selected variables can be renamed on-the-fly by providing a named list in `j` (e.g., `DT[, .(NewX = X, NewY = Y)]`).
+
+Variables can also be assigned in `j` by using the `:=` operator. This operator is distinctly different from the `<-` and `=` operators in base **R** and only works in `data.table`s:
+
+```{r datatable_assignment}
+
+DT[, NewVariable := X * Z]
+DT
+
+```
+
+It is possible to assign multiple variables at the same time, but this is rarely necessary and is not covered here.
+
+Functions can be performed on groups of rows easily in `data.table` with `by`. Such functions could be simple aggregating functions (e.g., `mean` or `sum`) or as complex as an entire simulation. Groups of rows defined by combinations of a list of variables provided to `by` are operated on. For example, to create a table of the mean value of variable `Z` by each category in `Y`:
+
+```{r datatable_groupby1}
+
+# Get the mean of Z for each Y
+DT[, .(MeanZ = mean(Z)), by = Y]
+
+```
+
+This value could also be assigned back to the original table in the same step (note that `MeanZ` is repeated for a given `Y` value):
+
+```{r datatable_groupby2}
+
+DT[, MeanZ := mean(Z), by = Y]
+DT
+
+```
+
+In the previous examples, the `mean` function was used but could be substituted for other functions or more complex functions that reference more than just the `Z` variable (e.g., `DT[, .(Output = X/2 * Z^2), by = Y]`).
+
+* Functions that just add columns
+* Good practice
+* setcolorder/NULL
+* setorder, setkey, and order (different `NA` treatment)
+* using `data.table`s in functions (creating and avoiding copies)
+* printing a `data.table` after a function (use `[` when returning result, creates copy)
+* native merging X[Y]
+* .N, .I, .SD
+
+### Join and Merge
+
+### `set` Functions
+
+### Advanced Variable References
+
+* get, mget (inherit)
+* with = FALSE
+* eval
+
+## Using RStudio
+
+Developers should use [RStudio](https://www.rstudio.com/products/rstudio/download/) as their interactive development environment. RStudio is free software that offers a wealth of features and functionality that are incredibly helpful for developing **R** applications. These features provide the means for developers to better manage, organize, and navigate their work, as well as shortcuts for producing content with fewer keystrokes. All of these taken together means that a developer will spend less time wading through large and complex code bases and more time on thinking critically about their code and how it should be written.
+
+Below is a list of RStudio How-To articles that are critical to the development of `rFreight` applications and should be mastered by developers. Additional How-To articles on the usage of RStudio and other advanced topics can be found on [RStudio's Documentation website](https://support.rstudio.com/hc/en-us/categories/200035113-Documentation).
+
+1. [Working in the Console](https://support.rstudio.com/hc/en-us/articles/200404846-Working-in-the-Console)
+1. [Editing and Executing Code](https://support.rstudio.com/hc/en-us/articles/200484448-Editing-and-Executing-Code)
+1. [Importing Data with RStudio](https://support.rstudio.com/hc/en-us/articles/218611977-Importing-Data-with-RStudio)
+1. [Working Directories and Workspaces](https://support.rstudio.com/hc/en-us/articles/200711843-Working-Directories-and-Workspaces)
+1. [Navigating Code](https://support.rstudio.com/hc/en-us/articles/200710523-Navigating-Code)
+1. [Code Completion](https://support.rstudio.com/hc/en-us/articles/205273297-Code-Completion)
+1. [Code Folding and Sections](https://support.rstudio.com/hc/en-us/articles/200484568-Code-Folding-and-Sections)
+1. [Using Projects](https://support.rstudio.com/hc/en-us/articles/200526207-Using-Projects)
+1. [Using Source Windows](https://support.rstudio.com/hc/en-us/articles/207126217-Using-Source-Windows)
+1. [Keyboard Shortcuts](https://support.rstudio.com/hc/en-us/articles/200711853-Keyboard-Shortcuts)
+1. [Customizing Keyboard Shortcuts](https://support.rstudio.com/hc/en-us/articles/206382178-Customizing-Keyboard-Shortcuts)
+1. [Emacs Editor Keybindings](https://support.rstudio.com/hc/en-us/articles/210928128-Emacs-Editor-Keybindings)
+1. [Debugging with RStudio](https://support.rstudio.com/hc/en-us/articles/205612627-Debugging-with-RStudio)*
+1. [Code Diagnostics](https://support.rstudio.com/hc/en-us/articles/205753617-Code-Diagnostics)*
+1. [Profiling with RStudio](https://support.rstudio.com/hc/en-us/articles/218221837-Profiling-with-RStudio)*
+
+\* See the dedicated section in this document regarding [Debugging and Profiling](#debugging-and-profiling) for more details on these subjects.
+
+# Acknowledgments
