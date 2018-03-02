@@ -262,8 +262,8 @@ NAICS2 <- unique(est$n2)
 # This helps in reducing run time and the size of the problem
 distancethreshold <- c(100,250,500,1000,Inf) # For sub optimal solution to maximum matching problem
 
-est[,n4:=substr(naics,1,4)]
-firm[,n4:=substr(naics,1,4)]
+# est[,n4:=substr(naics,1,4)]
+# firm[,n4:=substr(naics,1,4)]
 
 employee_size_categories = 1:12
 

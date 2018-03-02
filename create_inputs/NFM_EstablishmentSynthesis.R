@@ -48,8 +48,6 @@ cbp[, naics := as.integer(naics)]
 cbp[, est := NULL]
 cbp[, emp := NULL]
 
-# fwrite(cbp, "./Data/cbp.establishments.csv")
-
 ##############################################################################
 # Read in the rankings table (output of the LEHD data processing code)
 lehdtazm <- fread("inputs/lehdtazm.csv")
@@ -115,36 +113,13 @@ emp_taz <- merge(emp_taz, lehdtazm[, .(CountyFIPS, StateFIPS, TAZ, n2, LEmp)],
                  by = c("CountyFIPS", "StateFIPS", "TAZ", "n2"), all = TRUE)
 emp_taz[is.na(emp), emp := 0]
 
-#--------------------------------------------------------------------------------------
-# # Check sums - signif more in CBP than LEHD
-# sum(emp_taz$emp)
-# sum(emp_taz$LEmp)
-# 
-# # Check merges etc didn't alter employment
-# sum(lehdtazm$LEmp)
-# sum(cbp.establishments$emp)
-# 
-# # Check plot
-# png("./Data/employment.png", width = 7.5, height = 7.5, res = 300, units = "in")
-# plot(emp_taz$emp, emp_taz$LEmp,
-#      xlab = "CBP Employment", ylab = "LEHD Employment", xlim = c(0, 175000), ylim = c(0, 175000))
-# dev.off()
-# 
-# # Plot employment by TAZ (total)
-# emp_taz <- emp_taz[, .(emp = sum(emp), LEmp = sum(LEmp)), by = TAZ]
-# png("./Data/employment_taz.png", width = 7.5, height = 7.5, res = 300, units = "in")
-# plot(emp_taz$emp, emp_taz$LEmp,
-#      xlab = "CBP Employment", ylab = "LEHD Employment", xlim = c(0, 4000000), ylim = c(0, 4000000))
-# dev.off()
-#--------------------------------------------------------------------------------------
-
 # Save Final File for use in establishment-est connection code
 cbp.establishments[, 10:15 := NULL]
 cbp.establishments$esizecat <- interaction( "e", cbp.establishments$esizecat, sep = "")
 
 #--------------------------------------------------------------------------------------
 #create agriculture and foreign establishments data
-#-------------------------
+#--------------------------------------------------------------------------------------
 ag.est <- merge(data.table(NAICSio=NAICS2007io_to_SCTG$NAICSio[NAICS2007io_to_SCTG$SCTG %in% c(1,2)], k=1),
                  data.table(unique(cbp.establishments[,.(TAZ,CountyFIPS,StateFIPS,FAF4)]),k=1),
                  by = "k", allow.cartesian = TRUE)
@@ -189,7 +164,9 @@ foreign.est[, estid := .I + nrow(cbp.establishments) + nrow(ag.est)]
 
 cbp.establishments <- rbind(cbp.establishments, ag.est, foreign.est)
 cbp.establishments[, n2 := as.integer(substr(naics, 1, 2))]
-
+cbp.establishments[, n4 := as.integer(substr(naics, 1, 4))]
 dir.create("outputs", showWarnings=FALSE)
 fwrite(cbp.establishments, "outputs/cbp.establishments_final.csv")
+
+
 

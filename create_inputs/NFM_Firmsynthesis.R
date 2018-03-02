@@ -88,17 +88,10 @@ cbp[, prob := NULL]
 cbp[, est := NULL]
 cbp[, emp := NULL]
 
-#SUSB_F[, emp := 2*f1+ 7*f2+ 12*f3+ 17*f4+ 22*f5+ 27*f6+ 32*f7+ 37*f8+ 44*f9+ 62*f10+ 87*f11+ 124*f12+
-#              174*f13+ 249*f14+ 349*f15+ 449*f16+ 624*f17+ 874*f18+ 1249*f19+ 1749*f20+ 2249*f21+ 3749*f22+ 5000*f23]
-#sum(SUSB_F$emp)
-#[1] 241,248,645
-
-# fwrite(cbp, "./Data/cbp.firms.csv")
 
 ##############################################################################
 # Read in the rankings table (output of the LEHD data processing code) and the processed cbp table
 lehdtazm <- fread("inputs/lehdtazm.csv")
-# cbp      <- fread("./Data/cbp.firms.csv")
 
 # Enumerate the CBP firms
 #-----------------------------------------------
@@ -163,28 +156,6 @@ emp_taz <- merge(emp_taz, lehdtazm[, .(CountyFIPS, StateFIPS, TAZ, n2, LEmp)],
                  by = c("CountyFIPS", "StateFIPS", "TAZ", "n2"), all = TRUE)
 emp_taz[is.na(emp), emp := 0] ##TODO: The employment numbers are probably not comparable.
 
-#--------------------------------------------------------------------------------------
-# # Check sums - signif more in CBP than LEHD
-# sum(emp_taz$emp)
-# sum(emp_taz$LEmp)
-# 
-# # Check merges etc didn't alter employment
-# sum(lehdtazm$LEmp)
-# sum(cbp.firms$emp)
-# 
-# # Check plot
-# png("./Data/employment.png", width = 7.5, height = 7.5, res = 300, units = "in")
-# plot(emp_taz$emp, emp_taz$LEmp,
-#      xlab = "CBP Employment", ylab = "LEHD Employment", xlim = c(0, 175000), ylim = c(0, 175000))
-# dev.off()
-# 
-# # Plot employment by TAZ (total)
-# emp_taz <- emp_taz[, .(emp = sum(emp), LEmp = sum(LEmp)), by = TAZ]
-# png("./Data/employment_taz.png", width = 7.5, height = 7.5, res = 300, units = "in")
-# plot(emp_taz$emp, emp_taz$LEmp,
-#      xlab = "CBP Employment", ylab = "LEHD Employment", xlim = c(0, 4000000), ylim = c(0, 4000000))
-# dev.off()
-#--------------------------------------------------------------------------------------
 
 # Save Final File for use in firm-est connection code
 cbp.firms[, 10:15 := NULL]
@@ -236,7 +207,7 @@ foreignfirms[, firmid := .I + nrow(cbp.firms) + nrow(agfirms)]
 
 cbp.firms <- rbind(cbp.firms, agfirms, foreignfirms)
 cbp.firms[, n2 := as.integer(substr(naics, 1, 2))]
-
+cbp.firms[, n4 := as.integer(substr(naics, 1, 4))]
 dir.create("outputs", showWarnings=FALSE)
 fwrite(cbp.firms, "outputs/cbp.firms_final.csv")
 
