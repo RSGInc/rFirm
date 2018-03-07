@@ -73,27 +73,31 @@ def firm_sim_enumerate(
 
     # Merge in the single-NAICSio naics
     firms['NAICS6_make'] = reindex(
-        NAICS2012_to_NAICS2007io[NAICS2012_to_NAICS2007io.proportion == 1].set_index('NAICS').NAICSio,
+        NAICS2012_to_NAICS2007io[NAICS2012_to_NAICS2007io.proportion == 1]
+        .set_index('NAICS').NAICSio,
         firms.NAICS2012
     )
 
     t0 = print_elapsed_time("Merge in the single-NAICSio naics", t0, debug=True)
 
-    # random select NAICSio 2007 code for multi 2012 naics code based on proportions (probabilities)
-    multi_NAICS2012_to_NAICS2007io = NAICS2012_to_NAICS2007io[NAICS2012_to_NAICS2007io.proportion < 1]
+    # random select NAICSio 2007 code for multi 2012 naics code
+    # based on proportions (probabilities)
+    multi_NAICS2012_to_NAICS2007io = \
+        NAICS2012_to_NAICS2007io[NAICS2012_to_NAICS2007io.proportion < 1]
     multi_naics2007io_naics2012_codes = multi_NAICS2012_to_NAICS2007io.NAICS.unique()
     multi_naics2007io_firms = firms[firms.NAICS2012.isin(multi_naics2007io_naics2012_codes)]
 
     for naics, naics_firms in multi_naics2007io_firms.groupby('NAICS2012'):
 
         # slice the NAICS2012_to_NAICS2007io rows for this naics 2012 code
-        naics_naicsio = multi_NAICS2012_to_NAICS2007io[multi_NAICS2012_to_NAICS2007io.NAICS == naics]
+        naics_naicsio = \
+            multi_NAICS2012_to_NAICS2007io[multi_NAICS2012_to_NAICS2007io.NAICS == naics]
 
         # choose a random NAICS2007io code for each business with this naics 2012 code
         naicsio = np.random.choice(naics_naicsio.NAICSio.values,
-                                 size=len(naics_firms),
-                                 p=naics_naicsio.proportion.values,
-                                 replace=True)
+                                   size=len(naics_firms),
+                                   p=naics_naicsio.proportion.values,
+                                   replace=True)
 
         firms.loc[naics_firms.index, 'NAICS6_make'] = naicsio
 
