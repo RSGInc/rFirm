@@ -73,7 +73,7 @@ def firm_sim_enumerate(
 
     # Merge in the single-NAICSio naics
     firms['NAICS6_make'] = reindex(
-        NAICS2012_to_NAICS2007io[NAICS2012_to_NAICS2007io.proportion == 1]\
+        NAICS2012_to_NAICS2007io[NAICS2012_to_NAICS2007io.proportion == 1]
             .set_index('NAICS').NAICSio,
         firms.NAICS2012
     )
@@ -95,9 +95,9 @@ def firm_sim_enumerate(
 
         # choose a random NAICS2007io code for each business with this naics 2012 code
         naicsio = np.random.choice(naics_naicsio.NAICSio.values,
-                                 size=len(naics_firms),
-                                 p=naics_naicsio.proportion.values,
-                                 replace=True)
+                                   size=len(naics_firms),
+                                   p=naics_naicsio.proportion.values,
+                                   replace=True)
 
         firms.loc[naics_firms.index, 'NAICS6_make'] = naicsio
 
