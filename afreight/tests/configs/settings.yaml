@@ -12,11 +12,7 @@ input_tables:
     index_col: industry10
   naics_empcat:
     filename: corresp_naics_empcat.csv
-    index_col: NAICS2n3
-    column_map:
-      Model_EmpCat: model_emp_cat
-  lehd_naics_empcat:
-    filename: lehd_naics_empcat.csv
+    index_col: n2
     column_map:
       Model_EmpCat: model_emp_cat
 #  taz1_taz2:
@@ -58,6 +54,11 @@ input_tables:
   NAICS2007_to_NAICS2007io:
     filename: NAICS2007_to_NAICS2007io.csv
     index_col: NAICS
+  NAICS2012_to_NAICS2007io:
+    filename: NAICS2012_to_NAICS2007io.csv
+    # no index col as there are dupes in both columns
+    column_map:
+      Proportion: proportion
   NAICS2012_to_NAICS2007:
     filename: NAICS2012_to_NAICS2007.csv
     # no index col as there are dupes in both columns

@@ -207,7 +207,6 @@ foreignfirms[, firmid := .I + nrow(cbp.firms) + nrow(agfirms)]
 
 cbp.firms <- rbind(cbp.firms, agfirms, foreignfirms)
 cbp.firms[, n2 := as.integer(substr(naics, 1, 2))]
-cbp.firms[, n4 := as.integer(substr(naics, 1, 4))]
 dir.create("outputs", showWarnings=FALSE)
 fwrite(cbp.firms, "outputs/cbp.firms_final.csv")
 

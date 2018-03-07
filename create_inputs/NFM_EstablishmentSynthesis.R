@@ -164,9 +164,20 @@ foreign.est[, estid := .I + nrow(cbp.establishments) + nrow(ag.est)]
 
 cbp.establishments <- rbind(cbp.establishments, ag.est, foreign.est)
 cbp.establishments[, n2 := as.integer(substr(naics, 1, 2))]
-cbp.establishments[, n4 := as.integer(substr(naics, 1, 4))]
 dir.create("outputs", showWarnings=FALSE)
 fwrite(cbp.establishments, "outputs/cbp.establishments_final.csv")
+
+# Create sample output for firm synthesis
+CREATE_SAMPLE <- FALSE
+SAMPLE_SIZE <- 10L
+
+if(CREATE_SAMPLE){
+  set.seed(151)
+  est_index <- cbp.establishments[,.I[sample(.N, min(SAMPLE_SIZE, .N))],.(naics, esizecat)]$V1
+  est <- cbp.establishments[est_index]
+  fwrite(est, file = "../national_freight/data/firms_test.csv")
+}
+  
 
 
 
