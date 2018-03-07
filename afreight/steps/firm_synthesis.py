@@ -74,8 +74,7 @@ def firm_sim_enumerate(
     # Merge in the single-NAICSio naics
     firms['NAICS6_make'] = reindex(
         NAICS2012_to_NAICS2007io[NAICS2012_to_NAICS2007io.proportion == 1]
-            .set_index('NAICS').NAICSio,
-        firms.NAICS2012
+            .set_index('NAICS').NAICSio, firms.NAICS2012
     )
 
     t0 = print_elapsed_time("Merge in the single-NAICSio naics", t0, debug=True)
