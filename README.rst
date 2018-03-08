@@ -1,5 +1,4 @@
-aFreight
-========
+rFirm
+=====
 
-Python version of Behavioral-based National Freight Demand Model. aFreight is
-implemented in the [ActivitySim](https://github.com/UDST/activitysim) framework.
+Firm synthesis implemented in the [ActivitySim](https://github.com/activitysim) framework.

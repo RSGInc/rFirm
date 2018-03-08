@@ -169,13 +169,12 @@ dir.create("outputs", showWarnings=FALSE)
 fwrite(cbp.establishments, "outputs/cbp.establishments_final.csv")
 fwrite(cbp.establishments, "../national_freight/data/firms.csv")
 
-
 if(DEBUG){
   SAMPLE_SIZE <- 10L
   set.seed(151)
   est_index <- cbp.establishments[,.I[sample(.N, min(SAMPLE_SIZE, .N))],.(naics, esizecat)]$V1
   est <- cbp.establishments[est_index]
-  fwrite(est, file = "../national_freight/data/firms_test.csv")
+  fwrite(est, file = "../outputs/firms_test.csv")
 }
   
 

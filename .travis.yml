@@ -21,8 +21,8 @@ install:
 - pip --no-cache-dir install https://github.com/ActivitySim/activitysim/zipball/master
 - pip install .
 script:
-- pycodestyle afreight
-- py.test --cov afreight --cov-report term-missing
+- pycodestyle rFirm
+- py.test --cov rFirm --cov-report term-missing
 after_success:
 - coveralls
 - bin/build_docs.sh
