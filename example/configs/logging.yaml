@@ -14,7 +14,7 @@ logging:
 
   loggers:
 
-    afreight:
+    rFirm:
       level: !!python/name:logging.DEBUG
       handlers: [console, logfile]
       propagate: false

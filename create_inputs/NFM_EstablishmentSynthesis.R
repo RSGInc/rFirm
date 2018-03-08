@@ -167,7 +167,7 @@ cbp.establishments[, n2 := as.integer(substr(naics, 1, 2))]
 dir.create("outputs", showWarnings=FALSE)
 fwrite(cbp.establishments, "outputs/cbp.establishments_final.csv")
 
-# Create sample output for firm synthesis
+# Create sample output for Python firm synthesis
 CREATE_SAMPLE <- FALSE
 SAMPLE_SIZE <- 10L
 
@@ -175,7 +175,7 @@ if(CREATE_SAMPLE){
   set.seed(151)
   est_index <- cbp.establishments[,.I[sample(.N, min(SAMPLE_SIZE, .N))],.(naics, esizecat)]$V1
   est <- cbp.establishments[est_index]
-  fwrite(est, file = "../national_freight/data/firms_test.csv")
+  fwrite(est, file = "../outputs/firms_test.csv")
 }
   
 

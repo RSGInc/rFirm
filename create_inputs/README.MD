@@ -8,4 +8,4 @@ Includes all scripts and data inputs
   - set DEBUG=TRUE in "NFM_MainSynthesis.R" in order to run only the first industry + all employee size categories
   - set DEBUG=FALSE in "NFM_MainSynthesis.R" in order to run all industries + all employee size categories
   - source("NFM_MainSynthesis.R")
-  
+  - Copy outputs/firms_test.csv to example/data for running firm synthesis

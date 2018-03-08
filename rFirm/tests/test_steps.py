@@ -9,7 +9,7 @@ from activitysim.core import pipeline
 from activitysim.core import inject
 from activitysim.core.config import setting
 
-from afreight import steps
+from rFirm import steps
 
 
 def teardown_function(func):

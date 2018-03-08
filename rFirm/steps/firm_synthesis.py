@@ -1,4 +1,4 @@
-# aFreight
+# rFirm
 # See full license in LICENSE.txt.
 
 import logging
@@ -19,10 +19,10 @@ from activitysim.core.tracing import print_elapsed_time
 from activitysim.core.config import setting
 from activitysim.core.util import reindex
 
-from afreight.util import read_table
-from afreight.util import bucket_round
+from rFirm.util import read_table
+from rFirm.util import bucket_round
 
-import afreight.base_variables as base_variables
+import rFirm.base_variables as base_variables
 
 logger = logging.getLogger(__name__)
 

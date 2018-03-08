@@ -1,4 +1,4 @@
-# aFreight
+# rFirm
 # See full license in LICENSE.txt.
 
 import logging
@@ -12,7 +12,7 @@ from activitysim.core import pipeline
 
 from activitysim.core.config import setting
 
-from afreight.util import read_csv_table
+from rFirm.util import read_csv_table
 
 
 logger = logging.getLogger(__name__)
