@@ -18,10 +18,13 @@ source("NFM_Firmsynthesis.R")
 ####################################################
 ### Establishment Synthesis
 ####################################################
+DEBUG <- TRUE # Writes a sample file 'firms_test.csv'
+              # in a national_freight/data directory to test
+              # the python script
 source("NFM_EstablishmentSynthesis.R")
 
 ####################################################
 ### Firms and establishment matching
 ####################################################
-DEBUG = TRUE #run only the first industry + all employee size categories
+DEBUG <- TRUE #run only the first industry + all employee size categories
 source("NFM_Firmsynthesis_Allocate_Est_Firms.R")
