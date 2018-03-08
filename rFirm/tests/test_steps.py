@@ -24,12 +24,12 @@ def test_full_run1():
 
     # data_dir = os.path.join(os.path.dirname(__file__), 'data')
     data_dir = os.path.join(os.path.dirname(__file__),
-                            '..', '..', 'national_freight', 'data')
+                            '..', '..', 'example', 'data')
     orca.add_injectable("data_dir", data_dir)
 
     # scenarios_dir = os.path.join(os.path.dirname(__file__), 'scenarios')
     scenarios_dir = os.path.join(os.path.dirname(__file__),
-                                 '..', '..', 'national_freight', 'scenarios')
+                                 '..', '..', 'example', 'scenarios')
     orca.add_injectable("scenarios_dir", scenarios_dir)
 
     output_dir = os.path.join(os.path.dirname(__file__), 'output')
