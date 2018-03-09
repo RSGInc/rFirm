@@ -8,7 +8,7 @@
   
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   
-  <title>aFreight &mdash; aFreight 0.1 documentation</title>
+  <title>rFirm &mdash; rFirm 0.1 documentation</title>
   
 
   
@@ -35,7 +35,7 @@
         <link rel="index" title="Index"
               href="genindex.html"/>
         <link rel="search" title="Search" href="search.html"/>
-    <link rel="top" title="aFreight 0.1 documentation" href="#"/> 
+    <link rel="top" title="rFirm 0.1 documentation" href="#"/> 
 
   
   <script src="_static/js/modernizr.min.js"></script>
@@ -54,7 +54,7 @@
           
 
           
-            <a href="#" class="icon icon-home"> aFreight
+            <a href="#" class="icon icon-home"> rFirm
           
 
           
@@ -90,8 +90,7 @@
             
               <!-- Local TOC -->
               <div class="local-toc"><ul>
-<li><a class="reference internal" href="#">aFreight</a><ul>
-<li><a class="reference internal" href="#software-design">Software Design</a></li>
+<li><a class="reference internal" href="#">rFirm</a><ul>
 <li><a class="reference internal" href="#contents">Contents</a></li>
 </ul>
 </li>
@@ -110,7 +109,7 @@
       <nav class="wy-nav-top" role="navigation" aria-label="top navigation">
         
           <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
-          <a href="#">aFreight</a>
+          <a href="#">rFirm</a>
         
       </nav>
 
@@ -140,7 +139,7 @@
     
       <li><a href="#">Docs</a> &raquo;</li>
         
-      <li>aFreight</li>
+      <li>rFirm</li>
     
     
       <li class="wy-breadcrumbs-aside">
@@ -159,23 +158,9 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
             
-  <div class="section" id="afreight">
-<h1>aFreight<a class="headerlink" href="#afreight" title="Permalink to this headline">¶</a></h1>
-<p>Python version of Behavioral-based National Freight Demand Model.</p>
-<p>Additional information about the aFreight development effort is on the
-<a class="reference external" href="https://github.com/rsg/afreight/wiki">GitHub project wiki</a>.</p>
-<div class="section" id="software-design">
-<h2>Software Design<a class="headerlink" href="#software-design" title="Permalink to this headline">¶</a></h2>
-<p>aFreight is
-implemented in Python, and makes heavy use of the vectorized backend C/C++ libraries in
-<a class="reference external" href="http://pandas.pydata.org">pandas</a>  and <a class="reference external" href="http://numpy.org">numpy</a>.  The core design
-principle of the system is vectorization of for loops, and this principle
-is woven into the system wherever reasonable.  As a result, the Python portions of the software
-can be thought of as more of an orchestrator, data processor, etc. that integrates a series of
-C/C++ vectorized data table and matrix operations.  The model system formulates
-each simulation as a series of vectorized table operations and the Python layer
-is responsible for setting up and providing expressions to operate on these large data tables.</p>
-</div>
+  <div class="section" id="rfirm">
+<h1>rFirm<a class="headerlink" href="#rfirm" title="Permalink to this headline">¶</a></h1>
+<p>Firm Synthesis.</p>
 <div class="section" id="contents">
 <h2>Contents<a class="headerlink" href="#contents" title="Permalink to this headline">¶</a></h2>
 <div class="toctree-wrapper compound">
