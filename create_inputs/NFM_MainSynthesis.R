@@ -18,9 +18,8 @@ source("NFM_Firmsynthesis.R")
 ####################################################
 ### Establishment Synthesis
 ####################################################
-DEBUG <- TRUE # Writes a sample file 'firms_test.csv'
-              # in a national_freight/data directory to test
-              # the python script
+DEBUG <- TRUE # Writes a sample file 'firms_test.csv' in the 
+              # example/data directory to test the python script
 source("NFM_EstablishmentSynthesis.R")
 
 ####################################################
