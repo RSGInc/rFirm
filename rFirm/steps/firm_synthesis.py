@@ -1,4 +1,4 @@
-# aFreight
+# rFirm
 # See full license in LICENSE.txt.
 
 import logging
@@ -19,10 +19,10 @@ from activitysim.core.tracing import print_elapsed_time
 from activitysim.core.config import setting
 from activitysim.core.util import reindex
 
-from afreight.util import read_table
-from afreight.util import bucket_round
+from rFirm.util import read_table
+from rFirm.util import bucket_round
 
-import afreight.base_variables as base_variables
+import rFirm.base_variables as base_variables
 
 logger = logging.getLogger(__name__)
 
@@ -43,26 +43,10 @@ def firm_sim_load_firms(NAICS2012_to_NAICS2007):
     # FIXME for regression
     firms = firms.sort_index()
 
-    # - convert any naics2012 to naics2007
-    # FIXME the firms_establishments table has inconsistent naics codes (mixed 2007 and 2013 codes)
-    # this is presumably an error in the preprocessing step that creates the table
-    is_naics_2012 = ~firms.naics.isin(NAICS2012_to_NAICS2007.NAICS2007)
-    assert firms[is_naics_2012].naics.isin(NAICS2012_to_NAICS2007.NAICS2012).all()
+    # The firms table has 2012 naics code
+    firms['NAICS2012'] = firms.naics
 
-    unique_naics2012 = firms.naics[is_naics_2012].unique()
-    map_2012_to_2007 = \
-        NAICS2012_to_NAICS2007[NAICS2012_to_NAICS2007.NAICS2012.isin(unique_naics2012)]
-    # prune many-to-one
-    map_2012_to_2007 = map_2012_to_2007[~map_2012_to_2007.NAICS2012.duplicated()]
-    map_2012_to_2007 = map_2012_to_2007.set_index('NAICS2012').NAICS2007
-
-    # replace not_naics2007 with mapped values
-    firms['NAICS2007'] = firms.naics
-    firms.loc[is_naics_2012, 'NAICS2007'] = \
-        reindex(map_2012_to_2007, firms.NAICS2007[is_naics_2012])
-
-    # all naics should now be NAICS2007
-    assert firms.NAICS2007.isin(NAICS2012_to_NAICS2007.NAICS2007).all()
+    assert firms.NAICS2012.isin(NAICS2012_to_NAICS2007.NAICS2012).all()
 
     # make sure nobody is using this unawares
     firms.rename(columns={'naics': 'pnaics'}, inplace=True)
@@ -74,11 +58,10 @@ def firm_sim_load_firms(NAICS2012_to_NAICS2007):
 
 def firm_sim_enumerate(
         firms,
-        NAICS2007_to_NAICS2007io,
+        NAICS2012_to_NAICS2007io,
         employment_categories,
         naics_industry,
-        industry_10_5,
-        naics_empcat):
+        industry_10_5):
     """
 
     enumerate firms
@@ -86,12 +69,45 @@ def firm_sim_enumerate(
     """
 
     # - Look up NAICS2007io classifications
-    firms['NAICS6_make'] = reindex(NAICS2007_to_NAICS2007io.NAICSio, firms.NAICS2007)
+    t0 = print_elapsed_time()
+
+    # Merge in the single-NAICSio naics
+    firms['NAICS6_make'] = reindex(
+        NAICS2012_to_NAICS2007io[NAICS2012_to_NAICS2007io.proportion == 1]
+        .set_index('NAICS').NAICSio,
+        firms.NAICS2012
+    )
+
+    t0 = print_elapsed_time("Merge in the single-NAICSio naics", t0, debug=True)
+
+    # random select NAICSio 2007 code for multi 2012 naics code
+    # based on proportions (probabilities)
+    multi_NAICS2012_to_NAICS2007io = \
+        NAICS2012_to_NAICS2007io[NAICS2012_to_NAICS2007io.proportion < 1]
+    multi_naics2007io_naics2012_codes = multi_NAICS2012_to_NAICS2007io.NAICS.unique()
+    multi_naics2007io_firms = firms[firms.NAICS2012.isin(multi_naics2007io_naics2012_codes)]
+
+    for naics, naics_firms in multi_naics2007io_firms.groupby('NAICS2012'):
+
+        # slice the NAICS2012_to_NAICS2007io rows for this naics 2012 code
+        naics_naicsio = \
+            multi_NAICS2012_to_NAICS2007io[multi_NAICS2012_to_NAICS2007io.NAICS == naics]
+
+        # choose a random NAICS2007io code for each business with this naics 2012 code
+        naicsio = np.random.choice(naics_naicsio.NAICSio.values,
+                                   size=len(naics_firms),
+                                   p=naics_naicsio.proportion.values,
+                                   replace=True)
+
+        firms.loc[naics_firms.index, 'NAICS6_make'] = naicsio
+
+    t0 = print_elapsed_time("choose 2007 NAICSio for multi-2012 naics", t0, debug=True)
+
     if firms.NAICS6_make.isnull().any():
         logger.error("%s null NAICS6_make codes in firms" % firms.NAICS6_make.isnull().sum())
 
     # - Derive 2, 3, and 4 digit NAICS codes
-    firms['n4'] = (firms.NAICS2007 / 100).astype(int)
+    firms['n4'] = (firms.NAICS2012 / 100).astype(int)
     firms['n3'] = (firms.n4 / 10).astype(int)
     firms['n2'] = (firms.n3 / 10).astype(int)
     assert ~firms.n2.isnull().any()
@@ -127,9 +143,8 @@ def firm_sim_taz_allocation(firms, naics_empcat):
     # most of the R code serves no purpose when there is only one level of TAZ
 
     # - Assign the model employment category to each firm
-    firms['model_emp_cat'] = reindex(naics_empcat.model_emp_cat, firms.n3)
-    # backstop missing n3 empcats with n2
-    firms.model_emp_cat.fillna(reindex(naics_empcat.model_emp_cat, firms.n2), inplace=True)
+    firms['model_emp_cat'] = reindex(naics_empcat.model_emp_cat, firms.n2)
+
     assert ~firms.model_emp_cat.isnull().any()
 
     assert firms.index.is_unique
@@ -158,14 +173,13 @@ def scale_cbp_to_se(employment, firms):
 
     del firms['adjustment']
     del employment['adjustment']
-
     return firms
 
 
 def firm_sim_scale_employees(
         firms,
         employment_categories,
-        lehd_naics_empcat,
+        naics_empcat,
         taz_fips,
         taz_faf4,
         socio_economics_taz):
@@ -173,8 +187,12 @@ def firm_sim_scale_employees(
      Scale Firms to Employment Forecasts
     """
 
+    # Separate out the foreign firms
+    firms_foreign = firms[firms.FAF4 > 800]
+    firms = firms[firms.FAF4 < 800]
+
     # employment categories that
-    model_emp_cats = lehd_naics_empcat.model_emp_cat.unique()
+    model_emp_cats = naics_empcat.model_emp_cat.unique()
 
     # we expect all lehd_naics_empcat categories to appear as columns in socio_economics_taz
     assert set(model_emp_cats).issubset(set(socio_economics_taz.columns.values))
@@ -184,7 +202,7 @@ def firm_sim_scale_employees(
 
     # columns that firm_sim_scale_employees_taz (allegedly) expects in firms
     region_firm_cols = \
-        ['TAZ', 'county_FIPS', 'state_FIPS', 'FAF4', 'NAICS2007', 'n4', 'n3', 'n2',
+        ['TAZ', 'county_FIPS', 'state_FIPS', 'FAF4', 'NAICS2012', 'n4', 'n3', 'n2',
          'NAICS6_make', 'industry10', 'ind'
                                       'ustry5', 'model_emp_cat', 'esizecat', 'emp']
     firms = firms[region_firm_cols].copy()
@@ -256,7 +274,6 @@ def firm_sim_scale_employees(
     assert (firms_needed.emp_CBP == 0).all()
     firms_needed['n'] = \
         (firms_needed.emp_SE / firms_needed.avg_emp).clip(lower=1).round().astype(int)
-
     prng = pipeline.get_rn_generator().get_global_rng()
     new_firms = []
     for emp_cat, emp_cat_firms_needed in firms_needed.groupby('model_emp_cat'):
@@ -315,6 +332,12 @@ def firm_sim_scale_employees(
     assert not (employment_new.emp_CBP == 0).any()
 
     new_firms = scale_cbp_to_se(employment_new, new_firms)
+    # New firms created can have zero employment after bucketround
+    if (new_firms.emp < 1).any():
+        n0 = new_firms.shape[0]
+        new_firms = new_firms[new_firms.emp > 0]
+        n1 = new_firms.shape[0]
+        logger.info('Dropped %s out of %s no-emp new firms' % (n0 - n1, n0))
 
     for emp_cat in firms_needed.model_emp_cat.unique():
         n_needed = firms_needed[firms_needed.model_emp_cat == emp_cat].n.sum()
@@ -342,6 +365,17 @@ def firm_sim_scale_employees(
     summary.emp_firms.fillna(0, inplace=True)
     assert (summary.emp_firms == summary.emp_SE).all()
     t0 = print_elapsed_time("error check firm_sim_scale_employees results", t0, debug=True)
+
+    # Reset the indices (bus_id) of foreign firms
+    MAX_BUS_ID = firms.index.max()
+    logger.info("assigning foreign firm indexes starting above MAX_BUS_ID %s" % (MAX_BUS_ID,))
+    firms_foreign.reset_index(drop=True, inplace=True)
+    firms_foreign.index = firms_foreign.index + MAX_BUS_ID + 1
+    firms_foreign.index.name = firms.index.name
+
+    # Combine the new firms with foreign firms
+    firms = pd.concat([firms, firms_foreign]).sort_index()
+    assert firms.index.is_unique  # index (bus_id) should be unique
 
     # Recode employee counts into categories
     firms['esizecat'] = \
@@ -412,8 +446,8 @@ def firm_sim_assign_SCTG(
     # commodity for them based on probability thresholds for multiple commodities
     keymaps = [
         # TODO: are these the right correspodences given the I/O data for the current project?
-        KeyMap('NAICS2007', 211111, 'SCTG', (16L, 19L),      (.45, .55)),       # Crude Petroleum and Natural Gas Extraction: Crude petroleum; Coal and petroleum products, n.e.c.            # nopep8
-        KeyMap('NAICS2007', 324110, 'SCTG', (17L, 18L, 19L), (.25, .25, .50)),  # Petroleum Refineries: Gasoline and aviation turbine fuel; Fuel oils; Coal and petroleum products, n.e.c.    # nopep8
+        KeyMap('NAICS2012', 211111, 'SCTG', (16L, 19L),      (.45, .55)),       # Crude Petroleum and Natural Gas Extraction: Crude petroleum; Coal and petroleum products, n.e.c.            # nopep8
+        KeyMap('NAICS2012', 324110, 'SCTG', (17L, 18L, 19L), (.25, .25, .50)),  # Petroleum Refineries: Gasoline and aviation turbine fuel; Fuel oils; Coal and petroleum products, n.e.c.    # nopep8
                                                                                                                                                                                           # nopep8
         KeyMap('n4', 4233, 'SCTG', (10L, 11L, 12L, 25L, 26L), (0.10, 0.10, 0.60, 0.10, 0.10)),  # Lumber and Other Construction Materials Merchant Wholesalers                            # nopep8
         KeyMap('n4', 4235, 'SCTG', (13L, 14L, 31L, 32L), (0.25, 0.25, 0.25, 0.25)),             # Metal and Mineral (except Petroleum) Merchant Wholesalers                               # nopep8
@@ -491,7 +525,7 @@ def firm_sim_types(firms):
     firms['maker'] = False
     firms.loc[makers.index, 'maker'] = True
 
-    return firms[['state_FIPS', 'county_FIPS', 'FAF4', 'TAZ', 'SCTG', 'NAICS2007', 'NAICS6_make',
+    return firms[['state_FIPS', 'county_FIPS', 'FAF4', 'TAZ', 'SCTG', 'NAICS2012', 'NAICS6_make',
                   'industry10', 'industry5', 'model_emp_cat', 'esizecat', 'emp',
                   'warehouse', 'producer', 'maker']].copy()
 
@@ -570,6 +604,7 @@ def firm_sim_iopairs(firms, io_values, NAICS2007io_to_SCTG):
     # InputOutputValues[,NAICS6_Use:=factor(NAICS6_Use,levels = levels(Firms$NAICS6_Make))]
 
     # - Calcuate value per employee required (US domestic employment) for each NAICS6_make code
+    # FIXME - use FAF4 filters to filter domestic firms
     domestic_emp_counts_by_naics = \
         firms[~firms.state_FIPS.isnull()][['NAICS6_make', 'emp']].\
         groupby('NAICS6_make')['emp'].sum()
@@ -860,7 +895,7 @@ def firm_sim_consumers(firms, firm_input_output_pairs, unitcost, firm_pref_weigh
     consumers.rename(columns=col_map, inplace=True)
 
     # FIXME is this supposed to duplicate or rename?
-    consumers['input_commodity'] = consumers['NAICS']
+    # consumers['input_commodity'] = consumers['NAICS']
 
     return consumers
 
@@ -1060,11 +1095,11 @@ def firm_synthesis(
         output_dir,
         NAICS2012_to_NAICS2007,
         NAICS2007_to_NAICS2007io,
+        NAICS2012_to_NAICS2007io,
         employment_categories,
         naics_industry,
         industry_10_5,
         naics_empcat,
-        lehd_naics_empcat,
         taz_fips,
         taz_faf4,
         socio_economics_taz,
@@ -1081,11 +1116,11 @@ def firm_synthesis(
 
     NAICS2012_to_NAICS2007 = NAICS2012_to_NAICS2007.to_frame()
     NAICS2007_to_NAICS2007io = NAICS2007_to_NAICS2007io.to_frame()
+    NAICS2012_to_NAICS2007io = NAICS2012_to_NAICS2007io.to_frame()
     employment_categories = employment_categories.to_frame()
     naics_industry = naics_industry.to_frame()
     industry_10_5 = industry_10_5.to_frame()
     naics_empcat = naics_empcat.to_frame()
-    lehd_naics_empcat = lehd_naics_empcat.to_frame()
     taz_fips = taz_fips.to_frame()
     taz_faf4 = taz_faf4.to_frame()
     socio_economics_taz = socio_economics_taz.to_frame()
@@ -1105,7 +1140,7 @@ def firm_synthesis(
     if REGRESS:
         # use uncorrected naics for regression
         logger.warn("using uncorrected firms.naics codes for regression")
-        firms.NAICS2007 = firms.pnaics
+        firms.NAICS2012 = firms.pnaics
 
     logger.info("%s firms" % (firms.shape[0],))
 
@@ -1113,11 +1148,10 @@ def firm_synthesis(
     t0 = print_elapsed_time()
     firms = firm_sim_enumerate(
         firms,
-        NAICS2007_to_NAICS2007io,
+        NAICS2012_to_NAICS2007io,
         employment_categories,
         naics_industry,
-        industry_10_5,
-        naics_empcat)
+        industry_10_5)
     t0 = print_elapsed_time("firm_sim_enumerate", t0, debug=True)
 
     logger.info("%s null NAICS_make in firms" % (firms.NAICS6_make.isnull().sum(),))
@@ -1143,7 +1177,7 @@ def firm_synthesis(
     firms = firm_sim_scale_employees(
         firms,
         employment_categories,
-        lehd_naics_empcat,
+        naics_empcat,
         taz_fips,
         taz_faf4,
         socio_economics_taz)

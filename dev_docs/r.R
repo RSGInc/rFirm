@@ -1,7 +1,7 @@
 
 install.packages('data.table')
 
-setwd("~/work/afreight/national_freight")
+setwd("~/work/rFirm/example")
 library("data.table")
 
 

@@ -1,0 +1,25 @@
+Model_EmpCat,n2,lehdn2,NAICS_Des,Model_Des
+aer,71,71,"Arts, Entertainment and Recreation","Arts, Entertainment, and Recreation"
+amf,11,11,"Agriculture, Forestry, Fishing and Hunting","Agriculture, Mining & Forestry"
+amf,21,21,Mining,"Agriculture, Mining & Forestry"
+con,23,23,Construction,Construction
+edu,61,61,Educational Services,Education
+gov,92,92,Government,Government
+hss,62,62,Health Care,Health and Social Services
+mfg,31,3133,Manufacturing,Manufacturing (except high tech)
+mfg,32,3133,Manufacturing,Manufacturing (except high tech)
+mfg,33,3133,Manufacturing,Manufacturing (except high tech)
+osv,81,81,Other Services,Other Services (except Public Administration)
+pbs,51,51,Information,Professional and Business Services
+pbs,52,52,Finance and Insurance,Professional and Business Services
+pbs,53,53,Real Estate,Professional and Business Services
+pbs,54,54,"Professional, Scientific and Technical",Professional and Business Services
+pbs,55,55,Management of Companies and Enterprises,Professional and Business Services
+pbs,56,56,"Administrative, Support, Waste Management",Professional and Business Services
+rcs,44,4445,Retail Trade,Retail and Consumer Services
+rcs,45,4445,Retail Trade,Retail and Consumer Services
+rcs,72,72,Retail Trade,Retail and Consumer Services
+twu,22,22,Utilities,"Transportation, Warehousing and Utilities"
+twu,48,4849,Transportation,"Transportation, Warehousing and Utilities"
+twu,49,4849,Warehousing,"Transportation, Warehousing and Utilities"
+wt,42,42,Wholesale Trade,Wholesale Trade

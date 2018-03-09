@@ -2,7 +2,7 @@ import os
 
 os.getcwd()
 
-os.chdir('national_freight')
+os.chdir('rFirm')
 
 from activitysim.core import inject_defaults
 
@@ -10,7 +10,7 @@ from activitysim.core import tracing
 from activitysim.core import pipeline
 from activitysim.core import inject
 from activitysim.core.config import setting
-import afreight
+import rFirm
 
 tracing.config_logger()
 
@@ -24,7 +24,7 @@ df = pipeline.get_table("table1").to_frame()
 
 import pandas as pd
 
-file_path = "/Users/jeff.doyle/work/afreight/national_freight/regression_data/results/firm_sim_types/outputs/Firms.csv"
+file_path = "/Users/jeff.doyle/work/rFirm/example/regression_data/results/firm_sim_types/outputs/Firms.csv"
 rfirms = pd.read_csv(file_path, comment='#'). \
     rename(columns={'BusID': 'bus_id', 'TAZ1': 'TAZ', 'Model_EmpCat': 'model_emp_cat'}). \
     set_index('bus_id')
@@ -41,7 +41,7 @@ firms[firms.TAZ1==TRACE_TAZ][['BusID','Model_EmpCat', 'Emp', 'TAZ1']]
 
 '97025 firms, 31873 producers, 31561 makers'
 
-file_path = "/Users/jeff.doyle/work/afreight/national_freight/regression_data/results/firm_sim_iopairs/outputs/x_iopairs.csv"
+file_path = "/Users/jeff.doyle/work/rFirm/example/regression_data/results/firm_sim_iopairs/outputs/x_iopairs.csv"
 firm_input_output_pairs = pd.read_csv(file_path, comment='#')
 
     . \
@@ -49,12 +49,12 @@ firm_input_output_pairs = pd.read_csv(file_path, comment='#')
     set_index('bus_id')
 
 
-file_path = "/Users/jeff.doyle/work/afreight/national_freight/regression_data/results/firm_sim_producers/outputs/producers.csv"
+file_path = "/Users/jeff.doyle/work/rFirm/example/regression_data/results/firm_sim_producers/outputs/producers.csv"
 producers = pd.read_csv(file_path, comment='#')
 
-file_path = "/Users/jeff.doyle/work/afreight/national_freight/regression_data/results/firm_sim_consumers/outputs/consumers.csv"
+file_path = "/Users/jeff.doyle/work/rFirm/example/regression_data/results/firm_sim_consumers/outputs/consumers.csv"
 consumers = pd.read_csv(file_path, comment='#')
 
 
-file_path = "/Users/jeff.doyle/work/afreight/national_freight/regression_data/results/firm_sim_producers/outputs/x_producers.csv"
+file_path = "/Users/jeff.doyle/work/rFirm/example/regression_data/results/firm_sim_producers/outputs/x_producers.csv"
 xproducers = pd.read_csv(file_path, comment='#')

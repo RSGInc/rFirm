@@ -55,7 +55,7 @@ firm_sim_process_inputs reads the following
 
 ### rfreight data files
 rfreight_data_dir <- "/Users/jeff.doyle/work/rFreight/data/"
-dest_data_dir <- "/Users/jeff.doyle/work/afreight/national_freight/data/"
+dest_data_dir <- "/Users/jeff.doyle/work/rFirm/example/data/"
 
 load(file = paste(rfreight_data_dir, "correspondences.rda", sep=""))
 fwrite(NAICS2007_to_NAICS2007io, paste(dest_data_dir, "NAICS2007_to_NAICS2007io.csv", sep=""))
@@ -67,6 +67,6 @@ fwrite(NAICS2012_to_NAICS2007, paste(dest_data_dir, "NAICS2012_to_NAICS2007.csv"
 fwrite(NAICS2007io_to_SCTG, paste(dest_data_dir, "NAICS2007io_to_SCTG.csv", sep=""))
 
 
-### create4d specifically for afreight
+### create4d specifically for rFirm
 
 industry_10_5 - added to replace "Add 5 level industry classification" R code in firm_sim_enumerate

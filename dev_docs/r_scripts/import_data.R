@@ -3,9 +3,9 @@ rm(list=ls())
 # library("data.table")
 # library("RSGFAF)
 
-setwd("/Users/jeff.doyle/work/afreight/national_freight")
+setwd("/Users/jeff.doyle/work/rFirm/example")
 
-dest_data_dir <- "/Users/jeff.doyle/work/afreight/national_freight/data/"
+dest_data_dir <- "/Users/jeff.doyle/work/rFirm/example/data/"
 
 ### national_freight data files
 

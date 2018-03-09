@@ -7,13 +7,13 @@ with open('README.rst') as file:
     long_description = file.read()
 
 setup(
-    name='afreight',
+    name='rFirm',
     version='0.1.dev1',
-    description='National Freight Model',
+    description='firm synthesis',
     author='contributing authors',
     author_email='jeff.doyle@rsginc.com',
     license='BSD-3',
-    url='https://github.com/RSGInc/afreight',
+    url='https://github.com/RSGInc/rFirm',
     classifiers=[
         'Development Status :: 4 - Beta',
         'Programming Language :: Python :: 2.7',
@@ -32,6 +32,5 @@ setup(
         'zbox >= 1.2',
         'psutil >= 4.1',
         'activitysim > 0.5',
-    ],
-    dependency_links=['http://github.com/rsginc/activitysim/tarball/master#egg=activitysim-0.4']
+    ]
 )

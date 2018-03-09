@@ -1,4 +1,4 @@
-# aFreight
+# rFirm
 # See full license in LICENSE.txt.
 
 import logging
@@ -12,8 +12,8 @@ from activitysim.core import pipeline
 
 from activitysim.core.config import setting
 
-from afreight.util import load_tables
-from afreight.util import scenario_dir
+from rFirm.util import load_tables
+from rFirm.util import scenario_dir
 
 logger = logging.getLogger(__name__)
 
