@@ -13,12 +13,12 @@ install:
 - conda update -q conda
 - conda info -a
 - |
-  conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION cytoolz numpy pandas pip pytables pyyaml toolz psutil
+  conda create -q -n test-environment python=$TRAVIS_PYTHON_VERSION cytoolz numpy pandas pip pytables pyyaml=3.13 toolz psutil
 - source activate test-environment
 - pip install orca openmatrix zbox
 - pip install pytest pytest-cov coveralls pycodestyle pytest-xdist
 - pip install sphinx numpydoc
-- pip --no-cache-dir install https://github.com/ActivitySim/activitysim/zipball/master
+- pip install activitysim==0.5.1
 - pip install .
 script:
 - pycodestyle rFirm
