@@ -39,5 +39,6 @@ If you are using the IntelliJ PyCharm IDE for Python, the environment can be sel
    * Select *Existing Environment*, then place the environment location recorded previously into the interpreter
    location dialog box.
    *Select *OK*
+7. You should be ready to run rFirm. Run example/run_simulation.py to test.
    
 
