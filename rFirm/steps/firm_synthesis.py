@@ -374,7 +374,7 @@ def firm_sim_scale_employees(
     firms_foreign.index.name = firms.index.name
 
     # Combine the new firms with foreign firms
-    firms = pd.concat([firms, firms_foreign]).sort_index()
+    firms = pd.concat([firms, firms_foreign], sort=True).sort_index()
     assert firms.index.is_unique  # index (bus_id) should be unique
 
     # Recode employee counts into categories
