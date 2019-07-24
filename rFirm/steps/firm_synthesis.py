@@ -1233,8 +1233,8 @@ def firm_synthesis(
     if REGRESS:
         regress(df=firm_io_pairs, step_name='firm_sim_iopairs', df_name='iopairs')
     if TRACE_TAZ is not None:
-            print "\nfirm_sim_iopairs TRACE_TAZ %s firm_input_output_pairs\n" % \
-                  TRACE_TAZ, firm_io_pairs[firm_io_pairs.TAZ == TRACE_TAZ].sort_values('bus_id')
+        print "\nfirm_sim_iopairs TRACE_TAZ %s firm_input_output_pairs\n" % \
+            TRACE_TAZ, firm_io_pairs[firm_io_pairs.TAZ == TRACE_TAZ].sort_values('bus_id')
 
     # - firm_sim_producers
     t0 = print_elapsed_time()
