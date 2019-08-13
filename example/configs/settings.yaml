@@ -74,6 +74,45 @@ input_tables:
     filename: NAICS2007io_to_SCTG.csv
     column_map:
       Proportion: proportion
+  foreign_prod_values:
+    filename: data_foreign_prod.csv
+    column_map:
+      Commodity_NAICS6: NAICS6
+      USImpVal: pro_val
+      FAFZONE: FAF4
+      ctrycod: CBPZONE
+  foreign_cons_values:
+    filename: data_foreign_cons.csv
+    column_map:
+      Commodity_NAICS6: NAICS6
+      USExpVal: con_val
+      FAFZONE: FAF4
+      ctrycod: CBPZONE
+  numa_dist:
+    filename: numa_dist.csv
+  firms_est:
+    filename: firms_establishments_pairs.csv
+    column_map:
+      naics.firm: NAICS6_firm
+      naics.est: NAICS6_est
+      CountyFIPS.firm: county_FIPS_firm
+      CountyFIPS.est: county_FIPS_est
+      FAF4.firm: FAF4_firm
+      FAF4.est: FAF4_est
+      TAZ.firm: TAZ_firm
+      TAZ.est: TAZ_est
+      n2.est: NAICS2_est
+      esizecat: esizecat_est
+      emp: emp_est
+      estid: bus_id
+      n4.est: NAICS4_est
+      firmid: firm_id
+      fsizecat: esizecat_firm
+      n4.firm: NAICS4_firm
+      n2.firm: NAICS2_firm
+      Distance: distance
+      StateFIPS.est: state_FIPS_est
+      StateFIPS.firm: state_FIPS_firm
 
 scenario_input_tables:
   socio_economics_taz:
