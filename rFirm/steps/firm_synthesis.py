@@ -77,9 +77,8 @@ def firm_sim_enumerate(
 
     # Merge in the single-NAICSio naics
     firms['NAICS6_make'] = reindex(
-        NAICS2012_to_NAICS2007io[NAICS2012_to_NAICS2007io.proportion == 1]
-            .set_index('NAICS').NAICSio,
-        firms.NAICS2012
+        NAICS2012_to_NAICS2007io[NAICS2012_to_NAICS2007io.proportion == 1].
+        set_index('NAICS').NAICSio, firms.NAICS2012
     )
 
     t0 = print_elapsed_time("Merge in the single-NAICSio naics", t0, debug=True)
@@ -151,22 +150,25 @@ def firm_sim_enumerate_foreign(firms,
                                industry_10_5,
                                foreign_prod_values, foreign_cons_values):
     # Both for_prod and for_cons include foreign public production/consumption value.
-    # Reallocate within each country to the remaining privately owned industries in proportion to their prod/cons value
-    # In the future, research commodity shares for public production and consumption and allocate in a more detailed way
+    # Reallocate within each country to the remaining privately owned industries in
+    # proportion to their prod/cons value
+    # In the future, research commodity shares for public production and consumption and
+    # allocate in a more detailed way
 
     # Foreign production
     no_pub_codes = [91000, 92000, 98000, 99000]
     foreign_prod_sum = foreign_prod_values.groupby(['FAF4', 'CBPZONE']).agg({'pro_val': sum})
     # Private transactions do not appear to exist in the foreign trade data
-    foreign_prod_sum_private = foreign_prod_values[~foreign_prod_values.NAICS6.isin(no_pub_codes)]. \
+    foreign_prod_sum_private = foreign_prod_values[~foreign_prod_values.NAICS6.isin(no_pub_codes)].\
         groupby(['FAF4', 'CBPZONE']).agg({'pro_val': sum})
     foreign_prod_sum = pd.merge(foreign_prod_sum, foreign_prod_sum_private,
                                 how='outer', left_index=True, right_index=True,
                                 suffixes=['', '_private'])
     foreign_prod_sum.pro_val_private.fillna(0, inplace=True)
-    foreign_prod_sum = foreign_prod_sum.assign(prod_scale=lambda df: np.where(df.pro_val_private > 0,
-                                                                              df.pro_val / df.pro_val_private,
-                                                                              0))
+    foreign_prod_sum = foreign_prod_sum.assign(prod_scale=lambda df: np.where(
+        df.pro_val_private > 0,
+        df.pro_val / df.pro_val_private,
+        0))
 
     # Account for countries with no non-public production by reallocating within FAF ZONE
     # so FAF ZONE production is conserved
@@ -175,25 +177,27 @@ def firm_sim_enumerate_foreign(firms,
 
     # Do the scaling for foreign production
     foreign_prod_values = foreign_prod_values[~foreign_prod_values.NAICS6.isin(no_pub_codes)].copy()
-    foreign_prod_values['pro_val_new'] = (foreign_prod_values.pro_val.values * \
-                                          foreign_prod_sum.reset_index('FAF4', drop=True). \
+    foreign_prod_values['pro_val_new'] = (foreign_prod_values.pro_val.values *
+                                          foreign_prod_sum.reset_index('FAF4', drop=True).
                                           loc[foreign_prod_values.CBPZONE.values,
-                                              'prod_scale'].values * \
+                                              'prod_scale'].values *
                                           foreign_prod_faf.loc[foreign_prod_values.FAF4.values,
                                                                'prod_scale'].values).astype(int)
 
     # Foreign consumption
     foreign_cons_sum = foreign_cons_values.groupby(['FAF4', 'CBPZONE']).agg({'con_val': sum})
     # Private transactions do not appear to exist in the foreign trade data
-    foreign_cons_sum_private = foreign_cons_values[~foreign_cons_values.NAICS6.isin(no_pub_codes)]. \
+    foreign_cons_sum_private = \
+        foreign_cons_values[~foreign_cons_values.NAICS6.isin(no_pub_codes)]. \
         groupby(['FAF4', 'CBPZONE']).agg({'con_val': sum})
     foreign_cons_sum = pd.merge(foreign_cons_sum, foreign_cons_sum_private,
                                 how='outer', left_index=True, right_index=True,
                                 suffixes=['', '_private'])
     foreign_cons_sum.con_val_private.fillna(0, inplace=True)
-    foreign_cons_sum = foreign_cons_sum.assign(con_scale=lambda df: np.where(df.con_val_private > 0,
-                                                                             df.con_val / df.con_val_private,
-                                                                             0))
+    foreign_cons_sum = \
+        foreign_cons_sum.assign(con_scale=lambda df: np.where(df.con_val_private > 0,
+                                                              df.con_val / df.con_val_private,
+                                                              0))
 
     # Account for countries with no non-public production by reallocating within FAF ZONE
     # so FAF ZONE production is conserved
@@ -202,10 +206,10 @@ def firm_sim_enumerate_foreign(firms,
 
     # Do the scaling for foreign production
     foreign_cons_values = foreign_cons_values[~foreign_cons_values.NAICS6.isin(no_pub_codes)].copy()
-    foreign_cons_values['con_val_new'] = (foreign_cons_values.con_val.values * \
-                                          foreign_cons_sum.reset_index('FAF4', drop=True). \
+    foreign_cons_values['con_val_new'] = (foreign_cons_values.con_val.values *
+                                          foreign_cons_sum.reset_index('FAF4', drop=True).
                                           loc[foreign_cons_values.CBPZONE.values,
-                                              'con_scale'].values * \
+                                              'con_scale'].values *
                                           foreign_cons_faf.loc[foreign_cons_values.FAF4.values,
                                                                'con_scale'].values).astype(int)
 
@@ -287,7 +291,8 @@ def firm_sim_enumerate_foreign(firms,
                 temp_fp.loc[:, keymap.target] = target_value
                 temp_fp.loc[:, 'prod_val'] = prod_val * prob
                 return_df = pd.concat([return_df, temp_fp], ignore_index=True)
-            foreign_producers = pd.concat([foreign_producers.loc[~flag_rows], return_df], ignore_index=True)
+            foreign_producers = pd.concat([foreign_producers.loc[~flag_rows], return_df],
+                                          ignore_index=True)
 
     for keymap in keymaps:
         flag_rows = (foreign_consumers[keymap.key_col] == keymap.key_value)
@@ -302,7 +307,8 @@ def firm_sim_enumerate_foreign(firms,
                 temp_fp.loc[:, keymap.target] = target_value
                 temp_fp.loc[:, 'prod_val'] = prod_val * prob
                 return_df = pd.concat([return_df, temp_fp], ignore_index=True)
-            foreign_consumers = pd.concat([foreign_consumers.loc[~flag_rows], return_df], ignore_index=True)
+            foreign_consumers = pd.concat([foreign_consumers.loc[~flag_rows], return_df],
+                                          ignore_index=True)
 
     assert foreign_producers.index.is_unique
     assert foreign_producers.index.is_unique
@@ -311,7 +317,8 @@ def firm_sim_enumerate_foreign(firms,
     foreign_consumers['producer'] = False
 
     firms_foreign = pd.concat([foreign_producers, foreign_consumers], ignore_index=True)
-    firms_foreign.rename(columns={'NAICS6': 'NAICS2007', 'NAICSio': 'NAICS6_make'}, inplace=True)
+    firms_foreign.rename(columns={'NAICS6': 'NAICS2007', 'NAICSio': 'NAICS6_make'},
+                         inplace=True)
     # - Derive 2, 3, and 4 digit NAICS codes
     firms_foreign['n4'] = (firms_foreign.NAICS2007 / 100).astype(int)
     firms_foreign['n3'] = (firms_foreign.n4 / 10).astype(int)
@@ -320,8 +327,10 @@ def firm_sim_enumerate_foreign(firms,
 
     # - code esizecat
     firms_foreign['esizecat'] = firms.esizecat.max()
-    firms_foreign['emp_range'] = reindex(employment_categories.set_index('id').emp_range, firms_foreign.esizecat)
-    firms_foreign['low_emp'] = reindex(employment_categories.set_index('id').low_threshold, firms_foreign.esizecat)
+    firms_foreign['emp_range'] = reindex(employment_categories.set_index('id').emp_range,
+                                         firms_foreign.esizecat)
+    firms_foreign['low_emp'] = reindex(employment_categories.set_index('id').low_threshold,
+                                       firms_foreign.esizecat)
 
     # - Add 10 level industry classification
     firms_foreign['industry10'] = reindex(naics_industry.industry, firms_foreign.n3).astype(str)
@@ -437,7 +446,8 @@ def firm_sim_scale_employees(
     # employment range
 
     # number of establishments by employment size category
-    firms_size = firms.groupby(['esizecat', 'emp_range', 'low_emp']).size().to_frame('est_n').reset_index()
+    firms_size = firms.groupby(['esizecat', 'emp_range', 'low_emp']).size().to_frame('est_n').\
+        reset_index()
     firms_size['est_emp_range'] = firms_size['est_n'] / firms_size['emp_range']
     # Hyman interpolator to interpolate number of establishments between the low and
     # high value of the employment range
@@ -451,8 +461,8 @@ def firm_sim_scale_employees(
                                                     hyman_interpol,
                                                     x.shape[0]),
                           'bus_id': x.index.tolist()})
-    firms_emp = pd.concat([pd.DataFrame.from_dict(x) for x in firms_emp.to_frame('firm_emp') \
-                          .reset_index().firm_emp.tolist()],
+    firms_emp = pd.concat([pd.DataFrame.from_dict(x) for x in firms_emp.to_frame('firm_emp').
+                          reset_index().firm_emp.tolist()],
                           axis=0)
     # firms_emp.loc[firms_emp.emp > 5000, 'emp'] = 5000
     firms_emp.set_index('bus_id', inplace=True)
@@ -503,7 +513,7 @@ def firm_sim_scale_employees(
     #    total SE employment.
 
     employment = pd.merge(employment,
-                          firms.groupby(['TAZ', 'model_emp_cat']).size(). \
+                          firms.groupby(['TAZ', 'model_emp_cat']).size().
                           to_frame('n_est').reset_index(),
                           on=['TAZ', 'model_emp_cat'],
                           how='outer').fillna(0)
@@ -515,13 +525,12 @@ def firm_sim_scale_employees(
     employment['to_distribute'] = (~(employment['to_assign']) & ((employment['n_est']) > 1))
     employment['to_move'] = (employment['emp_SE'] / employment['avg_emp']).apply(np.ceil)
     employment.loc[employment['emp_CBP'] > 0, 'to_move'] = 0.0
-    # employment.loc['est_req'] = (employment['emp_SE']-employment['emp'/employment['avg_emp']).fillna(0)
 
     # Employment Category Absent from CBP
     emp_cats_not_in_firms = ['gov']
 
     rem_assign = employment[~employment.model_emp_cat.isin(emp_cats_not_in_firms)].to_assign.sum()
-    numa_dist = numa_dist[numa_dist.oTAZ <> numa_dist.dTAZ]
+    numa_dist = numa_dist[numa_dist.oTAZ != numa_dist.dTAZ]
     firms['orig_TAZ'] = firms['TAZ']
 
     t0 = print_elapsed_time()
@@ -551,8 +560,9 @@ def firm_sim_scale_employees(
                     emp_assign.dTAZ).fillna(0).clip_lower(0)
                 dist_multiplier = 1000.0
                 emp_multiplier = 0.01
-                emp_assign['prob'] = (dist_multiplier * emp_assign['distance'].rdiv(1)) + \
-                                     emp_multiplier * (emp_assign['emp_avail'] / emp_assign['avg_emp'])
+                emp_assign['prob'] = (dist_multiplier * emp_assign['distance'].rdiv(1)) +\
+                                     (emp_multiplier * (emp_assign['emp_avail'] /
+                                                        emp_assign['avg_emp']))
                 emp_assign.loc[emp_assign.emp_avail < 1, 'prob'] = 0
                 dist_threshold = 25
                 check_size = 0L
@@ -572,14 +582,15 @@ def firm_sim_scale_employees(
                                                   replace=True,
                                                   p=grp.prob))
                 taz_select = taz_select.apply(pd.Series).stack().to_frame('dTAZ').astype(int)
-                taz_select = taz_select.reset_index(level=2, drop=True).groupby('dTAZ').\
+                taz_select = taz_select.reset_index(level=2, drop=True).groupby('dTAZ'). \
                     apply(lambda df: prng.choice(df.index.values,
                                                  1L,
                                                  replace=False,
-                                                 p=df.index.get_level_values('to_move').values/
-                                                   df.index.get_level_values('to_move').values.sum())[0]).\
-                    apply(pd.Series).\
-                    rename(columns={0: 'oTAZ', 1: 'to_move'}).reset_index().\
+                                                 p=(df.index.get_level_values('to_move').values /
+                                                    df.index.get_level_values('to_move').
+                                                    values.sum()))[0]). \
+                    apply(pd.Series). \
+                    rename(columns={0: 'oTAZ', 1: 'to_move'}).reset_index(). \
                     astype(int)
                 bus_select = pd.merge(taz_select, firms_sub.reset_index()[['bus_id', 'TAZ', 'emp']],
                                       how='inner',
@@ -590,24 +601,11 @@ def firm_sim_scale_employees(
                     lambda df: prng.choice(df.bus_id.values, min(df.to_move.unique().astype(int),
                                                                  df.shape[0] - 1L),
                                            replace=False, p=df.emp / df.emp.sum()))
-                # bus_select = taz_select.groupby('oTAZ').apply(lambda df:
-                #                                               prng.choice(
-                #                                                   firms_sub[firms_sub.TAZ.isin(df.dTAZ)].index,
-                #                                                   min(firms_sub[firms_sub.TAZ.isin(df.dTAZ)].shape[0],
-                #                                                       df.to_move.unique()),
-                #                                                   replace=False,
-                #                                                   p=firms_sub[firms_sub.TAZ.isin(df.dTAZ)]['emp']. \
-                #                                                       transform(lambda value: value / value.sum())
-                #                                               ).reshape(-1))
                 bus_select = bus_select.apply(pd.Series).stack().to_frame('bus_id').astype(int)
                 bus_select = bus_select.reset_index(level=1, drop=True)
-                # print 'Average Distance of selected TAZ: %f' % pd.merge(taz_select.reset_index(level=0),
-                #                                                        numa_dist,
-                #                                                        on=['oTAZ', 'dTAZ']).distance.mean()
-                est_moved = pd.merge(bus_select, taz_select, how='inner', left_index=True, right_on='oTAZ')
-                # est_moved = est_moved.set_index('bus_id')
+                est_moved = pd.merge(bus_select, taz_select,
+                                     how='inner', left_index=True, right_on='oTAZ')
                 firms.loc[est_moved.bus_id.values, 'TAZ'] = est_moved['oTAZ'].astype(int).values
-                # print 'Number of firms relocated: %d\n' % (firms[firms.TAZ <> firms.orig_TAZ].shape[0])
         employment = firms.groupby(['TAZ', 'model_emp_cat'])['emp'].sum()
         employment = employment.to_frame(name='emp_CBP').reset_index()
         # Melt socio_economics_taz employment data by TAZ and employment category
@@ -622,7 +620,7 @@ def firm_sim_scale_employees(
 
         # Re-allocation of TAZ to establishments for better scaling
         employment = pd.merge(employment,
-                              firms.groupby(['TAZ', 'model_emp_cat']).size(). \
+                              firms.groupby(['TAZ', 'model_emp_cat']).size().
                               to_frame('n_est').reset_index(),
                               on=['TAZ', 'model_emp_cat'],
                               how='outer').fillna(0)
@@ -637,10 +635,11 @@ def firm_sim_scale_employees(
         employment.loc[employment['emp_CBP'] > 0, 'to_move'] = 0.0
 
         # drop rows where both employment sources say there should be no employment in empcat
-        rem_assign = employment[~employment.model_emp_cat.isin(emp_cats_not_in_firms)].to_assign.sum()
+        rem_assign = employment[~employment.model_emp_cat.isin(emp_cats_not_in_firms)].\
+            to_assign.sum()
         # print 'Establishments remaining to be moved :%d\n' % rem_distribute
 
-    logger.info("%d firms relocated." % (firms[firms.orig_TAZ <> firms.TAZ].shape[0]))
+    logger.info("%d firms relocated." % (firms[firms.orig_TAZ != firms.TAZ].shape[0]))
 
     t0 = print_elapsed_time("firm_sim_scale_employees relocating to zero CBP \nzero+ SE NUMA",
                             t0,
@@ -654,7 +653,6 @@ def firm_sim_scale_employees(
                                     employment.model_emp_cat)
     employment['to_move'] = employment['n_est'] - employment[emp_to_check]
     employment.loc[employment.to_move < 0.0, 'to_move'] = 0.0
-    # employment.loc['est_req'] = (employment['emp_SE']-employment['emp'/employment['avg_emp']).fillna(0)
 
     rem_distribute = employment.to_distribute.sum()
     while rem_distribute > 0:
@@ -677,8 +675,9 @@ def firm_sim_scale_employees(
                 emp_distribute.loc[emp_distribute.emp_reqd < 0, 'emp_reqd'] = 0
                 dist_multiplier = 1000.0
                 emp_multiplier = 0.01
-                emp_distribute['prob'] = (dist_multiplier * emp_distribute['distance'].rdiv(1)) + \
-                                         emp_multiplier * (emp_distribute['emp_reqd'] / emp_distribute['avg_emp'])
+                emp_distribute['prob'] = (dist_multiplier * emp_distribute['distance'].rdiv(1)) +\
+                                         (emp_multiplier * (emp_distribute['emp_reqd'] /
+                                                            emp_distribute['avg_emp']))
                 emp_distribute.loc[emp_distribute.emp_reqd == 0, 'prob'] = 0
                 dist_threshold = 25
                 check_size = 0L
@@ -691,46 +690,29 @@ def firm_sim_scale_employees(
                 emp_distribute.loc[emp_distribute.distance > dist_threshold, 'prob'] = 0
                 emp_distribute = emp_distribute[emp_distribute.prob > 0].copy()
                 emp_distribute = emp_distribute.sort_values('prob', ascending=False)
-                # emp_distribute['prob'] = emp_distribute.assign(wt=lambda grp: grp.\
-                #                                                groupby('oTAZ')['to_move'].\
-                #                                                transform(lambda value: value.sum()-value.cumsum())).\
-                #     assign(prob2=lambda grp: grp['prob']*grp['wt']).\
-                #     assign(prob2=lambda grp: grp.groupby('oTAZ')['prob2'].\
-                #            transform(lambda value: value/value.sum()))['prob2']
                 emp_distribute['prob'] = emp_distribute.groupby('oTAZ')['prob']. \
                     transform(lambda value: value / value.sum())
-                taz_select = emp_distribute.groupby('oTAZ').apply(lambda grp: \
-                                                                      prng.choice(grp.dTAZ, grp.to_move.unique(). \
-                                                                                  astype(int),
-                                                                                  replace=True,
-                                                                                  p=grp.prob))
-                taz_select = taz_select.apply(pd.Series).stack().to_frame('dTAZ').astype(int)  # .reset_index(level=0)
-                # bus_select = pd.merge(taz_select.reset_index(), firms_sub.reset_index()[['bus_id', 'TAZ', 'emp', 'to_move']],
-                #                       how='inner',
-                #                       left_on='oTAZ',
-                #                       right_on='TAZ')
-                # bus_select = bus_select.groupby('TAZ').apply(lambda df: prng.choice(
-                #     df.bus_id,
-                #     df.to_move.unique().astype(int),
-                #     replace=False,
-                #     p=(df.emp/df.emp.sum())
-                # ))
-                bus_select = firms_sub[firms_sub.TAZ.isin(taz_select.index.get_level_values('oTAZ').unique().tolist())]. \
-                    groupby('TAZ'). \
-                    apply(lambda grp: prng.choice(grp.index, grp.to_move.unique().astype(int), replace=False,
+                taz_select = emp_distribute.groupby('oTAZ').apply(lambda grp:
+                                                                  prng.choice(grp.dTAZ,
+                                                                              grp.to_move.unique().
+                                                                              astype(int),
+                                                                              replace=True,
+                                                                              p=grp.prob))
+                taz_select = taz_select.apply(pd.Series).stack().to_frame('dTAZ').astype(int)
+                bus_select = firms_sub[firms_sub.TAZ.isin(taz_select.index.get_level_values('oTAZ').
+                                                          unique().tolist())].\
+                    groupby('TAZ').\
+                    apply(lambda grp: prng.choice(grp.index, grp.to_move.unique().astype(int),
+                                                  replace=False,
                                                   p=(grp.emp / grp.emp.sum())))
-                bus_select = bus_select.apply(pd.Series).stack().to_frame('bus_id').astype(
-                    int)  # .reset_index(level=0).set_index('bus_id')
-                # print 'Average Distance of selected TAZ: %f' % pd.merge(taz_select.reset_index(level=0),
-                #                                                        numa_dist,
-                #                                                        on=['oTAZ', 'dTAZ']).distance.mean()
+                bus_select = bus_select.apply(pd.Series).stack().to_frame('bus_id').\
+                    astype(int)
                 taz_select.index.names = ['TAZ', None]
-                est_moved = pd.merge(bus_select, taz_select, how='inner', left_index=True, right_index=True)
-                # est_moved = est_moved.set_index('bus_id')
+                est_moved = pd.merge(bus_select, taz_select, how='inner', left_index=True,
+                                     right_index=True)
                 firms.loc[est_moved.bus_id.values, 'TAZ'] = est_moved['dTAZ'].astype(int).values
         employment = firms.groupby(['TAZ', 'model_emp_cat'])['emp'].sum()
         employment = employment.to_frame(name='emp_CBP').reset_index()
-        # Melt socio_economics_taz employment data by TAZ and employment category
         employment_SE = socio_economics_taz.reset_index(). \
             melt(id_vars='TAZ', var_name='model_emp_cat', value_name='emp_SE')
         # inner join
@@ -742,7 +724,7 @@ def firm_sim_scale_employees(
 
         # Re-allocation of TAZ to establishments for better scaling
         employment = pd.merge(employment,
-                              firms.groupby(['TAZ', 'model_emp_cat']).size(). \
+                              firms.groupby(['TAZ', 'model_emp_cat']).size().
                               to_frame('n_est').reset_index(),
                               on=['TAZ', 'model_emp_cat'],
                               how='outer').fillna(0)
@@ -754,14 +736,13 @@ def firm_sim_scale_employees(
                                         employment.model_emp_cat)
         employment['to_move'] = employment['n_est'] - employment[emp_to_check]
         employment.loc[employment.to_move < 0.0, 'to_move'] = 0.0
-        # employment.loc['est_req'] = (employment['emp_SE']-employment['emp'/employment['avg_emp']).fillna(0)
 
         # drop rows where both employment sources say there should be no employment in empcat
         employment = employment[~((employment.emp_SE == 0) & (employment.emp_CBP == 0))]
         rem_distribute = employment.to_distribute.sum()
         # print 'Establishments remaining to be moved :%d\n' % rem_distribute
 
-    logger.info("%d firms relocated." % (firms[firms.orig_TAZ <> firms.TAZ].shape[0]))
+    logger.info("%d firms relocated." % (firms[firms.orig_TAZ != firms.TAZ].shape[0]))
     t0 = print_elapsed_time("firm_sim_scale_employees relocating establishments for better scaling",
                             t0,
                             debug=True)
@@ -1108,238 +1089,9 @@ def firm_sim_types(firms):
     # Combine the new firms with foreign firms
     firms = pd.concat([firms, firms_foreign]).sort_index()
 
-    return firms[['state_FIPS', 'county_FIPS', 'FAF4', 'TAZ', 'SCTG', 'NAICS2012', 'NAICS2007', 'NAICS6_make',
-                  'industry10', 'industry5', 'model_emp_cat', 'esizecat', 'emp',
+    return firms[['state_FIPS', 'county_FIPS', 'FAF4', 'TAZ', 'SCTG', 'NAICS2012', 'NAICS2007',
+                  'NAICS6_make', 'industry10', 'industry5', 'model_emp_cat', 'esizecat', 'emp',
                   'warehouse', 'producer', 'maker', 'prod_val']].copy()
-
-
-def firm_sim_iopairs(firms, io_values, NAICS2007io_to_SCTG):
-    """
-    Sample producer and consumer firms to create buyer-supplier pairings
-    """
-
-    t0 = print_elapsed_time()
-
-    # io_values.NAICS6_make = input commodity required to make NAICS6_use
-    # io_values.NAICS6_use = output commodity uses io_values.NAICS6_make as an input
-    # producers.NAICS6_make - the commodity the producer produces
-
-    # Separate foreign firms
-    firms_foreign = firms[firms.FAF4 > 800]
-    firms = firms[firms.FAF4 < 800]
-
-    # Identify consumer firms
-    cols = ['TAZ', 'county_FIPS', 'state_FIPS', 'FAF4', 'NAICS6_make', 'esizecat', 'emp']
-    firm_sample = firms[cols].copy()
-    firm_sample.reset_index(inplace=True)  # bus_id index as explicit column
-
-    t0 = print_elapsed_time("firm_sim_iopairs cols", t0, debug=True)
-
-    # Create a flag to make sure at least one firm is sampled
-    # for each zone and PRODUCED commodity combination
-
-    prng = pipeline.get_rn_generator().get_global_rng()
-    g = ['TAZ', 'FAF4', 'NAICS6_make', 'esizecat']
-    keeper_ids = \
-        firm_sample[g].groupby(g).agg(lambda x: prng.choice(x.index, size=1)[0]).values
-    t0 = print_elapsed_time("keeper_ids", t0, debug=True)
-
-    firm_sample['must_keep'] = False
-    firm_sample.loc[keeper_ids, 'must_keep'] = True
-
-    t0 = print_elapsed_time("firm_sim_iopairs must_keep", t0, debug=True)
-
-    # Create a sample of consumer firms based on the following rules to form
-    # the basis of the producer-consumer pairs to be simulated:
-    # 1. Keep all individual businesses in the region and halo states.
-    # 2. Also keep all large businesses throughout the U.S
-    # 3. Keep those identified as "MustKeep" above
-    # 4. Randomly sample an additional small percentage
-
-    temp_rand = prng.rand(firm_sample.shape[0])
-
-    firm_sample = firm_sample[
-        firm_sample.TAZ.isin(base_variables.BASE_TAZ1_HALO_STATES) |
-        (firm_sample.esizecat >= 5) |
-        firm_sample.must_keep |
-        (temp_rand > 0.95)]
-
-    # Remove extra fields
-    del firm_sample['must_keep']
-
-    t0 = print_elapsed_time("firm_sim_iopairs slice", t0, debug=True)
-
-    # For each consuming firm generate a list of input commodities that need to be purchased
-    # Filter to just transported commodities
-    # FIXME filters so io_values only contains producer NAICS6_make
-    # FIXME but nothing guarantees that the io_values NAICS6_use have any domestic producers
-    producer_naics = firms.NAICS6_make[firms.producer].unique()
-    io_values = io_values[io_values.NAICS6_make.isin(producer_naics)]
-
-    # - Calculate cumulative pct value of the consumption inputs
-    io_values = io_values.sort_values(by=['NAICS6_use', 'pro_val'])
-    io_values['cum_pro_val'] = \
-        io_values.groupby('NAICS6_use')['pro_val'].transform('cumsum')
-    io_values['cum_pct_pro_val'] = \
-        io_values['cum_pro_val'] / io_values.groupby('NAICS6_use')['cum_pro_val'].transform('last')
-
-    # Select suppliers including the first above the threshold value
-    # FIXME filter tp select io_values with highest pro_val for NAICS6_use
-    io_values = io_values[io_values.cum_pct_pro_val > (1 - base_variables.BASE_PROVALTHRESHOLD)]
-
-    # FIXME - use factors?
-    # InputOutputValues[,NAICS6_Make:=factor(NAICS6_Make,levels = levels(Firms$NAICS6_Make))]
-    # InputOutputValues[,NAICS6_Use:=factor(NAICS6_Use,levels = levels(Firms$NAICS6_Make))]
-
-    # - Calcuate value per employee required (US domestic employment) for each NAICS6_make code
-    # FIXME - use FAF4 filters to filter domestic firms
-    domestic_emp_counts_by_naics = \
-        firms[(~firms.state_FIPS.isnull())][['NAICS6_make', 'emp']]. \
-            groupby('NAICS6_make')['emp'].sum()
-
-    # - drop io_values rows where there are no domestic producers of the output commodity
-    io_values = io_values[io_values.NAICS6_use.isin(domestic_emp_counts_by_naics.index)]
-
-    # - annotate input_output_values with total emp count for producers of NAICS_output
-    io_values['emp'] = reindex(domestic_emp_counts_by_naics, io_values.NAICS6_use)
-    io_values['val_emp'] = io_values.pro_val / io_values.emp
-
-    t0 = print_elapsed_time("firm_sim_iopairs io_values", t0, debug=True)
-
-    # there are firms with no inputs (e.g. wholesalers)
-    # but we might want to keep an eye on them, as they will get dropped in merge
-    # output_NAICS = io_values.NAICS6_use.unique()
-    # firms_NAICS6_make = firms.NAICS6_make.unique()
-    # naics_without_inputs = list(set(firms_NAICS6_make) - set(output_NAICS))
-    # logger.info("%s NAICS_make without input commodities %s" %
-    #             (len(naics_without_inputs), naics_without_inputs))
-    # t0 = print_elapsed_time("naics_without_inputs", t0, debug=True)
-
-    # - inner join sample_firms with the top inputs required to produce firm's product
-    # pairs is a list of firms with one row for every major commodity the firm consumes
-    # pairs.NAICS6_use is the commodity the firm PRODUCES
-    # pairs.NAICS6_make is a commodity that the firm CONSUMES
-    pairs = pd.merge(left=firm_sample.rename(columns={'NAICS6_make': 'NAICS6_use'}),
-                     right=io_values[['NAICS6_use', 'NAICS6_make', 'val_emp']],
-                     left_on='NAICS6_use', right_on='NAICS6_use', how='inner')
-
-    assert not pairs.val_emp.isnull().any()
-
-    # - Foreign consumption
-    io_values['pct_pro_val'] = io_values.groupby('NAICS6_make')['pro_val']. \
-        transform(lambda value: value / value.sum())
-    pairs_foreign = pd.merge(left=firms_foreign,
-                             right=io_values[['NAICS6_use', 'NAICS6_make', 'pct_pro_val']],
-                             on='NAICS6_make',
-                             how='outer')
-    pairs_foreign.pct_pro_val.fillna(0, inplace=True)
-    pairs_foreign
-
-    t0 = print_elapsed_time("firm_sim_iopairs pairs", t0, debug=True)
-
-    # Look up all the SCTGs (Standard Classification of Transported Goods) each firm can produce
-    # Note: not every firm produces a transportable SCTG commodity
-    # Some firms can potentially make more than one SCTG, simulate exactly one
-    #
-
-    is_multi = (NAICS2007io_to_SCTG.proportion < 1)
-    multi_NAICS2007io_to_SCTG = NAICS2007io_to_SCTG[is_multi]
-    pairs_NAICS6_make = pairs.NAICS6_make.to_frame(name='NAICS6_make')
-    pair_is_multi = pairs.NAICS6_make.isin(multi_NAICS2007io_to_SCTG.NAICSio.unique())
-    t0 = print_elapsed_time("firm_sim_iopairs pair_is_multi flag", t0, debug=True)
-
-    # - single-SCTG naics
-    singletons = pd.merge(
-        pairs_NAICS6_make[~pair_is_multi],
-        NAICS2007io_to_SCTG[~is_multi][['NAICSio', 'SCTG']].set_index('NAICSio'),
-        left_on="NAICS6_make",
-        right_index=True,
-        how="left").SCTG
-    t0 = print_elapsed_time("firm_sim_iopairs single-SCTG naics", t0, debug=True)
-
-    # - random select SCTG for multi-SCTG naics based on proportions (probabilities)
-
-    # for each distinct multi-SCTG naics
-    multi_sctg_pairs = pairs_NAICS6_make[pair_is_multi]
-    sctgs = []
-    bus_ids = []
-    for naics, naics_firms in multi_sctg_pairs.groupby('NAICS6_make'):
-        # slice the NAICS2007io_to_SCTG rows for this naics
-        naics_sctgs = multi_NAICS2007io_to_SCTG[multi_NAICS2007io_to_SCTG.NAICSio == naics]
-
-        # choose a random SCTG code for each business with this naics code
-        sctgs.append(prng.choice(naics_sctgs.SCTG.values,
-                                 size=len(naics_firms),
-                                 p=naics_sctgs.proportion.values,
-                                 replace=True))
-
-        bus_ids.append(naics_firms.index.values)
-
-    t0 = print_elapsed_time("firm_sim_iopairs choose SCTG for multi-SCTG naics", t0, debug=True)
-
-    # singletons
-    sctgs.append(singletons.values)
-    bus_ids.append(singletons.index.values)
-    sctgs = list(itertools.chain.from_iterable(sctgs))
-    bus_ids = list(itertools.chain.from_iterable(bus_ids))
-    t0 = print_elapsed_time("firm_sim_iopairs itertools.chain", t0, debug=True)
-
-    # sctgs = pd.Series(sctgs, index=bus_ids)
-    # t0 = print_elapsed_time("firm_sim_iopairs SCTG series", t0, debug=True)
-
-    pairs['SCTG'] = pd.Series(sctgs, index=bus_ids)
-    t0 = print_elapsed_time("firm_sim_iopairs pairs['SCTG']", t0, debug=True)
-
-    assert sum(pairs['SCTG'].isnull()) == 0
-
-    # FIXME - move this tweaks to a data file
-
-    # Account for multiple SCTGs produced by certain naics codes (i.e. 211111 and 324110)
-    i = (pairs.NAICS6_make == "211000") & (pairs.SCTG == 16)
-    pairs.loc[i[i].index, 'SCTG'] = \
-        prng.choice([16, 19], p=[0.45, 0.55], size=i.sum(), replace=True)
-
-    i = (pairs.NAICS6_make == "324110")
-    pairs.loc[i[i].index, 'SCTG'] = \
-        prng.choice([17, 18, 19], p=[0.25, 0.5, 0.25], size=i.sum(), replace=True)
-
-    # Assume a small chance that a consumer works with a wholesaler instead of a direct shipper for
-    # a given shipment/commodity. Mutate some suppliers to wholesaler NAICS.
-
-    pairs_NAICS6_use2 = pairs['NAICS6_use'].transform(lambda naics6: naics6.str[:2])
-    temp_rand = prng.rand(pairs.shape[0])
-
-    # Pairs[NAICS6_Use2 != "42" & temprand < 0.30 & SCTG < 41,     NAICS6_Make := sctg_whl[SCTG]]
-    sctg_whl = np.array([
-        0,  # padding
-        424500, 424500, 424500, 424500, 424400, 424400, 424400, 424800, 424400, 423300,
-        423300, 423300, 423500, 423500, 423700, 424700, 424700, 424700, 424700, 424600,
-        424200, 424600, 424600, 423400, 423300, 423300, 424100, 424100, 424100, 424300,
-        423500, 423500, 423700, 423800, 425100, 423100, 423100, 425100, 423200, 423900])
-    i = (pairs_NAICS6_use2 != '42') & (pairs.SCTG < 41) & (temp_rand < 0.3)
-    pairs.loc[i[i].index, 'NAICS6_make'] = sctg_whl[pairs.loc[i[i].index, 'SCTG']].astype(str)
-
-    # Pairs[NAICS6_Use2 != "42" & temprand < 0.15 & SCTG %in% c(35, 38), NAICS6_Make := "423600"]
-    i = (pairs_NAICS6_use2 != '42') & (pairs.SCTG < 41) & (temp_rand < 0.15)
-    pairs.loc[i[i].index, 'NAICS6_make'] = '423600'
-
-    # Pairs[NAICS6_Use2 != "42" & temprand < 0.15 & SCTG == 40,          NAICS6_Make := "424900"]
-    i = (pairs_NAICS6_use2 != '42') & (pairs.SCTG == 40) & (temp_rand < 0.15)
-    pairs.loc[i[i].index, 'NAICS6_make'] = '424900'
-
-    t0 = print_elapsed_time("firm_sim_iopairs tweaks", t0, debug=True)
-
-    # - conflate duplicates
-    # Accounting for multiple SCTGs from one NAICS and for wholesalers means that certain
-    # users now have multiple identical inputs on a NAICS6_Make - SCTG basis
-    # aggregate (summing over ValEmp) so that NAICS6_MAke - SCTG is unique for each user
-
-    by_cols = ['bus_id', 'NAICS6_make', 'SCTG', 'NAICS6_use', 'TAZ', 'FAF4', 'esizecat']
-    pairs = pairs.groupby(by_cols)['val_emp'].sum().to_frame(name='val_emp').reset_index()
-
-    t0 = print_elapsed_time("firm_sim_iopairs group and sum", t0, debug=True)
-
-    return pairs
 
 
 def firm_sim_producers(firms, io_values, unitcost):
@@ -1379,7 +1131,8 @@ def firm_sim_producers(firms, io_values, unitcost):
     # FIXME how should we handle foreign production
     # FIXME there are i/o codes in foreign producers that do not exist in
     #  domestic producers
-    io_values = io_values[(io_values.NAICS6_make.isin(producers[domesitc_producer_idx].NAICS6_make.unique()))]
+    io_values = io_values[(io_values.NAICS6_make.isin(producers[domesitc_producer_idx].NAICS6_make.
+                                                      unique()))]
 
     # - For each output, select only the most important input commodities
 
@@ -1403,8 +1156,8 @@ def firm_sim_producers(firms, io_values, unitcost):
     # - total number of domestic employees manufacturing NAICS6_make commodity
     producer_emp_counts_by_naics = \
         producers[(~producers.state_FIPS.isnull()) & domesitc_producer_idx][['NAICS6_make',
-                                                                             'emp']]. \
-            groupby('NAICS6_make')['emp'].sum()
+                                                                             'emp']].\
+        groupby('NAICS6_make')['emp'].sum()
 
     # - annotate input_output_values with total emp count for producers of NAICS6_input
     io_values['emp'] = \
@@ -1548,8 +1301,8 @@ def firm_sim_consumers(firms, io_values, NAICS2007io_to_SCTG, unitcost, firm_pre
     # - Calcuate value per employee required (US domestic employment) for each NAICS6_make code
     # FIXME - use FAF4 filters to filter domestic firms
     domestic_emp_counts_by_naics = \
-        firms[(~firms.state_FIPS.isnull())][['NAICS6_make', 'emp']]. \
-            groupby('NAICS6_make')['emp'].sum()
+        firms[(~firms.state_FIPS.isnull())][['NAICS6_make', 'emp']].\
+        groupby('NAICS6_make')['emp'].sum()
 
     # - drop io_values rows where there are no domestic producers of the output commodity
     io_values = io_values[io_values.NAICS6_use.isin(domestic_emp_counts_by_naics.index)]
@@ -1661,7 +1414,8 @@ def firm_sim_consumers(firms, io_values, NAICS2007io_to_SCTG, unitcost, firm_pre
         424200, 424600, 424600, 423400, 423300, 423300, 424100, 424100, 424100, 424300,
         423500, 423500, 423700, 423800, 425100, 423100, 423100, 425100, 423200, 423900])
     i = (pairs_NAICS6_use2 != '42') & (consumers.SCTG < 41) & (temp_rand < 0.3)
-    consumers.loc[i[i].index, 'NAICS6_make'] = sctg_whl[consumers.loc[i[i].index, 'SCTG']].astype(str)
+    consumers.loc[i[i].index, 'NAICS6_make'] = sctg_whl[consumers.loc[i[i].index, 'SCTG']].\
+        astype(str)
 
     # Pairs[NAICS6_Use2 != "42" & temprand < 0.15 & SCTG %in% c(35, 38), NAICS6_Make := "423600"]
     i = (pairs_NAICS6_use2 != '42') & (consumers.SCTG < 41) & (temp_rand < 0.15)
@@ -1696,14 +1450,16 @@ def firm_sim_consumers(firms, io_values, NAICS2007io_to_SCTG, unitcost, firm_pre
     # - Foreign consumption
     io_values['pct_pro_val'] = io_values.groupby('NAICS6_make')['pro_val']. \
         transform(lambda value: value / value.sum())
-    consumers_foreign = pd.merge(left=firms_foreign[~firms_foreign.producer.astype(bool)].reset_index(),
+    consumers_foreign = pd.merge(left=firms_foreign[~firms_foreign.producer.astype(bool)].
+                                 reset_index(),
                                  right=io_values[['NAICS6_use', 'NAICS6_make', 'pct_pro_val']],
                                  on='NAICS6_make',
                                  how='inner')
     consumers_foreign.pct_pro_val.fillna(0, inplace=True)
     consumers_foreign['con_val'] = consumers_foreign.prod_val * 1E6 * consumers_foreign.pct_pro_val
     consumers_foreign['unit_cost'] = reindex(unitcost.unit_cost, consumers_foreign.SCTG)
-    consumers_foreign['purchase_amount_tons'] = consumers_foreign.con_val / consumers_foreign.unit_cost
+    consumers_foreign['purchase_amount_tons'] = consumers_foreign.con_val / (consumers_foreign.
+                                                                             unit_cost)
     consumers_foreign = consumers_foreign[consumers.columns].copy()
     del firms_foreign
 
@@ -1716,13 +1472,6 @@ def firm_sim_consumers(firms, io_values, NAICS2007io_to_SCTG, unitcost, firm_pre
     consumers['time_weight'] = reindex(firm_pref_weights.time_weight, consumers.SCTG)
     consumers['single_source_max_fraction'] = reindex(firm_pref_weights.single_source_max_fraction,
                                                       consumers.SCTG)
-    #
-    # consumers = pd.merge(
-    #     left=consumers,
-    #     right=firm_pref_weights[['cost_weight', 'time_weight', 'single_source_max_fraction']],
-    #     left_on='SCTG',
-    #     right_index=True
-    # )
 
     consumers.NAICS6_make = consumers.NAICS6_make.astype(str)
     consumers.NAICS6_use = consumers.NAICS6_use.astype(str)
@@ -1776,9 +1525,9 @@ def firm_sim_naics_set(producers, consumers):
 
     # - matching consumers and suppliers -- by NAICS codes
     producers_summary_naics = \
-        producers[['output_commodity', 'size', 'output_capacity_tons']]. \
-            groupby('output_commodity'). \
-            agg({'size': ['count', 'sum'], 'output_capacity_tons': 'sum'})
+        producers[['output_commodity', 'size', 'output_capacity_tons']].\
+        groupby('output_commodity').\
+        agg({'size': ['count', 'sum'], 'output_capacity_tons': 'sum'})
     producers_summary_naics.columns = producers_summary_naics.columns.map('_'.join)
     producers_summary_naics.reset_index(inplace=True)  # explicit output_commodity column
     producers_summary_naics.rename(columns={'size_count': 'producers',
@@ -1788,9 +1537,9 @@ def firm_sim_naics_set(producers, consumers):
                                    inplace=True)
 
     consumers_summary_naics = \
-        consumers[['input_commodity', 'size', 'purchase_amount_tons']]. \
-            groupby('input_commodity'). \
-            agg({'size': ['count', 'sum'], 'purchase_amount_tons': 'sum'})
+        consumers[['input_commodity', 'size', 'purchase_amount_tons']].\
+        groupby('input_commodity').\
+        agg({'size': ['count', 'sum'], 'purchase_amount_tons': 'sum'})
     consumers_summary_naics.columns = consumers_summary_naics.columns.map('_'.join)
     consumers_summary_naics.reset_index(inplace=True)  # explicit input_commodity column
     consumers_summary_naics.rename(columns={'size_count': 'consumers',
@@ -1875,9 +1624,9 @@ def firm_sim_summary(output_dir, producers, consumers, firms, firm_pref_weights)
 
     # - producers_emp_by_sctg
     producers_emp_by_sctg = \
-        producers[['SCTG', 'size', 'output_capacity_tons']]. \
-            groupby('SCTG'). \
-            agg({'size': ['count', 'sum'], 'output_capacity_tons': 'sum'})
+        producers[['SCTG', 'size', 'output_capacity_tons']].\
+        groupby('SCTG').\
+        agg({'size': ['count', 'sum'], 'output_capacity_tons': 'sum'})
     producers_emp_by_sctg.columns = producers_emp_by_sctg.columns.map('_'.join)
     producers_emp_by_sctg.rename(columns={'size_count': 'producers',
                                           'size_sum': 'employment',

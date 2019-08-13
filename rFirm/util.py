@@ -134,13 +134,14 @@ def target_round(weights, target_sum=None):
 
     return rounded_weights
 
+
 def round_preserve_threshold(x, threshold=1):
     x = np.round(np.cumsum(x))
     prev_value = 0
     borrow_value = 0
     new_x = np.array(x)
     for index in range(len(new_x)):
-        #print borrow_value
+        # print borrow_value
         if index > 0:
             cur_value = x[index]
             if borrow_value == 0:
@@ -169,5 +170,5 @@ def round_preserve_threshold(x, threshold=1):
             cur_value = x[index]
             prev_value = cur_value
         new_x[index] = cur_value
-    new_x = np.diff(np.insert(new_x,0,0))
+    new_x = np.diff(np.insert(new_x, 0, 0))
     return new_x.astype(int)
