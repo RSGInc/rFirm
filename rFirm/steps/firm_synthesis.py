@@ -157,10 +157,10 @@ def firm_sim_enumerate_foreign(firms,
 
     # Foreign production
     no_pub_codes = [91000, 92000, 98000, 99000]
-    foreign_prod_sum = foreign_prod_values.groupby(['FAF4', 'CBPZONE']).agg({'pro_val': sum})
+    foreign_prod_sum = foreign_prod_values.groupby(['FAF4', 'TAZ']).agg({'pro_val': sum})
     # Private transactions do not appear to exist in the foreign trade data
     foreign_prod_sum_private = foreign_prod_values[~foreign_prod_values.NAICS6.isin(no_pub_codes)].\
-        groupby(['FAF4', 'CBPZONE']).agg({'pro_val': sum})
+        groupby(['FAF4', 'TAZ']).agg({'pro_val': sum})
     foreign_prod_sum = pd.merge(foreign_prod_sum, foreign_prod_sum_private,
                                 how='outer', left_index=True, right_index=True,
                                 suffixes=['', '_private'])
@@ -179,17 +179,17 @@ def firm_sim_enumerate_foreign(firms,
     foreign_prod_values = foreign_prod_values[~foreign_prod_values.NAICS6.isin(no_pub_codes)].copy()
     foreign_prod_values['pro_val_new'] = (foreign_prod_values.pro_val.values *
                                           foreign_prod_sum.reset_index('FAF4', drop=True).
-                                          loc[foreign_prod_values.CBPZONE.values,
+                                          loc[foreign_prod_values.TAZ.values,
                                               'prod_scale'].values *
                                           foreign_prod_faf.loc[foreign_prod_values.FAF4.values,
-                                                               'prod_scale'].values).astype(int)
+                                                               'prod_scale'].values)
 
     # Foreign consumption
-    foreign_cons_sum = foreign_cons_values.groupby(['FAF4', 'CBPZONE']).agg({'con_val': sum})
+    foreign_cons_sum = foreign_cons_values.groupby(['FAF4', 'TAZ']).agg({'con_val': sum})
     # Private transactions do not appear to exist in the foreign trade data
     foreign_cons_sum_private = \
         foreign_cons_values[~foreign_cons_values.NAICS6.isin(no_pub_codes)]. \
-        groupby(['FAF4', 'CBPZONE']).agg({'con_val': sum})
+        groupby(['FAF4', 'TAZ']).agg({'con_val': sum})
     foreign_cons_sum = pd.merge(foreign_cons_sum, foreign_cons_sum_private,
                                 how='outer', left_index=True, right_index=True,
                                 suffixes=['', '_private'])
@@ -208,19 +208,19 @@ def firm_sim_enumerate_foreign(firms,
     foreign_cons_values = foreign_cons_values[~foreign_cons_values.NAICS6.isin(no_pub_codes)].copy()
     foreign_cons_values['con_val_new'] = (foreign_cons_values.con_val.values *
                                           foreign_cons_sum.reset_index('FAF4', drop=True).
-                                          loc[foreign_cons_values.CBPZONE.values,
+                                          loc[foreign_cons_values.TAZ.values,
                                               'con_scale'].values *
                                           foreign_cons_faf.loc[foreign_cons_values.FAF4.values,
-                                                               'con_scale'].values).astype(int)
+                                                               'con_scale'].values)
 
     # Enumerate foreign producers and consumers
     # Create one agent per country per commodity
     # Remove any records where the country and FAF zone are not known
     foreign_producers = foreign_prod_values[~foreign_prod_values.FAF4.isnull()][
-        ['NAICS6', 'NAICSio', 'pro_val_new', 'CBPZONE', 'FAF4']
+        ['NAICS6', 'NAICSio', 'pro_val_new', 'TAZ', 'FAF4']
     ].rename(columns={'pro_val_new': 'prod_val'}).assign(prod_val=lambda df: df.prod_val / 1e6)
     foreign_consumers = foreign_cons_values[~foreign_cons_values.FAF4.isnull()][
-        ['NAICS6', 'NAICSio', 'con_val_new', 'CBPZONE', 'FAF4']
+        ['NAICS6', 'NAICSio', 'con_val_new', 'TAZ', 'FAF4']
     ].rename(columns={'con_val_new': 'prod_val'}).assign(prod_val=lambda df: df.prod_val / 1e6)
 
     # Merge in the I/O NAICS codes and SCTG codes
@@ -285,7 +285,7 @@ def firm_sim_enumerate_foreign(firms,
         else:
             assert len(keymap.target_values) == len(keymap.probs)
             temp_fp = foreign_producers.loc[flag_rows].copy()
-            prod_val = temp_fp['prod_val']
+            prod_val = temp_fp['prod_val'].copy()
             return_df = pd.DataFrame(columns=temp_fp.columns)
             for target_value, prob in zip(keymap.target_values, keymap.probs):
                 temp_fp.loc[:, keymap.target] = target_value
@@ -301,7 +301,7 @@ def firm_sim_enumerate_foreign(firms,
         else:
             assert len(keymap.target_values) == len(keymap.probs)
             temp_fp = foreign_consumers.loc[flag_rows].copy()
-            prod_val = temp_fp['prod_val']
+            prod_val = temp_fp['prod_val'].copy()
             return_df = pd.DataFrame(columns=temp_fp.columns)
             for target_value, prob in zip(keymap.target_values, keymap.probs):
                 temp_fp.loc[:, keymap.target] = target_value
@@ -319,6 +319,7 @@ def firm_sim_enumerate_foreign(firms,
     firms_foreign = pd.concat([foreign_producers, foreign_consumers], ignore_index=True)
     firms_foreign.rename(columns={'NAICS6': 'NAICS2007', 'NAICSio': 'NAICS6_make'},
                          inplace=True)
+    firms_foreign = firms_foreign[~firms_foreign.NAICS6_make.isnull()].copy()
     # - Derive 2, 3, and 4 digit NAICS codes
     firms_foreign['n4'] = (firms_foreign.NAICS2007 / 100).astype(int)
     firms_foreign['n3'] = (firms_foreign.n4 / 10).astype(int)
@@ -350,14 +351,18 @@ def firm_sim_enumerate_foreign(firms,
         print "\nnon matching industry_10 codes\n", unmatched_industry_10
         firms_foreign.industry10.fillna('', inplace=True)
 
+    group_by_keys = ['NAICS6_make', 'TAZ', 'FAF4', 'SCTG', 'producer', 'industry10',
+                     'industry5', 'esizecat', 'low_emp', 'emp_range']
+    firms_foreign = firms_foreign.groupby(group_by_keys,
+                                          as_index=False).agg({'prod_val': sum})
+
     # Reindex foreign firms
-    MAX_BUS_ID = firms.index.max()
-    logger.info("assigning foreign firm indexes starting above MAX_BUS_ID %s" % (MAX_BUS_ID,))
-    firms_foreign.index = firms_foreign.index + MAX_BUS_ID + 1L
+    max_bus_id = firms.index.max()
+    logger.info("assigning foreign firm indexes starting above MAX_BUS_ID %s" % (max_bus_id,))
+    firms_foreign.index = firms_foreign.index + max_bus_id + 1L
     firms_foreign.index.name = firms.index.name
 
     firms = pd.concat([firms, firms_foreign])
-    firms.loc[firms.FAF4 > 800, 'TAZ'] = 0
     firms.loc[firms.FAF4 > 800, 'county_FIPS'] = 0
     firms.loc[firms.FAF4 > 800, 'state_FIPS'] = 0
 
@@ -368,10 +373,12 @@ def firm_sim_enumerate_foreign(firms,
 def firm_sim_taz_allocation(firms, naics_empcat):
     # most of the R code serves no purpose when there is only one level of TAZ
 
-    # - Assign the model employment category to each firm
-    firms['model_emp_cat'] = reindex(naics_empcat.model_emp_cat, firms.n2)
+    # - Assign the model employment category to each domestic firm
+    domestic_index = (firms.FAF4 < 800)
+    firms.loc[domestic_index, 'model_emp_cat'] = reindex(naics_empcat.model_emp_cat,
+                                                         firms.loc[domestic_index, 'n2'])
 
-    assert ~firms.model_emp_cat.isnull().any()
+    assert ~firms.loc[domestic_index].model_emp_cat.isnull().any()
 
     assert firms.index.is_unique
 
@@ -537,7 +544,7 @@ def firm_sim_scale_employees(
 
     prng = pipeline.get_rn_generator().get_global_rng()
     while rem_assign > 0:
-        for model_emp_cat in employment[employment.to_assign].model_emp_cat.unique():
+        for model_emp_cat in employment.model_emp_cat[employment.to_assign].unique():
             if model_emp_cat in emp_cats_not_in_firms:
                 continue
             # print 'Adjusting employment category: %s\n' % model_emp_cat
@@ -895,7 +902,7 @@ def firm_sim_scale_employees(
     firms_foreign.index.name = firms.index.name
 
     # Combine the new firms with foreign firms
-    firms = pd.concat([firms, firms_foreign], sort=True).sort_index()
+    firms = pd.concat([firms, firms_foreign]).sort_index()
     assert firms.index.is_unique  # index (bus_id) should be unique
 
     # Recode employee counts into categories
@@ -1089,7 +1096,7 @@ def firm_sim_types(firms):
     # Combine the new firms with foreign firms
     firms = pd.concat([firms, firms_foreign]).sort_index()
 
-    return firms[['state_FIPS', 'county_FIPS', 'FAF4', 'TAZ', 'SCTG', 'NAICS2012', 'NAICS2007',
+    return firms[['state_FIPS', 'county_FIPS', 'FAF4', 'TAZ', 'SCTG', 'NAICS2012',
                   'NAICS6_make', 'industry10', 'industry5', 'model_emp_cat', 'esizecat', 'emp',
                   'warehouse', 'producer', 'maker', 'prod_val']].copy()
 
@@ -1125,13 +1132,13 @@ def firm_sim_producers(firms, io_values, unitcost):
     # io_values.NAICS6_make = input commodity required to make NAICS6_use
     # io_values.NAICS6_use = output commodity uses io_values.NAICS6_make as an input
     producers = firms[firms.producer]
-    domesitc_producer_idx = producers.FAF4 < 800
+    domestic_producer_idx = producers.FAF4 < 800
 
     # we only want i/o pairs that use domesitc producers commodity as an input
     # FIXME how should we handle foreign production
     # FIXME there are i/o codes in foreign producers that do not exist in
     #  domestic producers
-    io_values = io_values[(io_values.NAICS6_make.isin(producers[domesitc_producer_idx].NAICS6_make.
+    io_values = io_values[(io_values.NAICS6_make.isin(producers[domestic_producer_idx].NAICS6_make.
                                                       unique()))]
 
     # - For each output, select only the most important input commodities
@@ -1155,7 +1162,7 @@ def firm_sim_producers(firms, io_values, unitcost):
 
     # - total number of domestic employees manufacturing NAICS6_make commodity
     producer_emp_counts_by_naics = \
-        producers[(~producers.state_FIPS.isnull()) & domesitc_producer_idx][['NAICS6_make',
+        producers[(~producers.state_FIPS.isnull()) & domestic_producer_idx][['NAICS6_make',
                                                                              'emp']].\
         groupby('NAICS6_make')['emp'].sum()
 
@@ -1281,6 +1288,8 @@ def firm_sim_consumers(firms, io_values, NAICS2007io_to_SCTG, unitcost, firm_pre
     # FIXME filters so io_values only contains producer NAICS6_make
     # FIXME but nothing guarantees that the io_values NAICS6_use have any domestic producers
     producer_naics = firms.NAICS6_make[firms.producer].unique()
+    producer_naics = np.unique(
+        np.append(producer_naics, firms_foreign.NAICS6_make[firms_foreign.producer].unique()))
     io_values = io_values[io_values.NAICS6_make.isin(producer_naics)]
 
     # - Calculate cumulative pct value of the consumption inputs
@@ -1473,8 +1482,10 @@ def firm_sim_consumers(firms, io_values, NAICS2007io_to_SCTG, unitcost, firm_pre
     consumers['single_source_max_fraction'] = reindex(firm_pref_weights.single_source_max_fraction,
                                                       consumers.SCTG)
 
-    consumers.NAICS6_make = consumers.NAICS6_make.astype(str)
-    consumers.NAICS6_use = consumers.NAICS6_use.astype(str)
+    consumers.NAICS6_make = consumers.NAICS6_make.astype('str')
+    consumers.NAICS6_use = consumers.NAICS6_use.astype('str')
+    consumers.SCTG = consumers.SCTG.astype(int)
+    consumers.FAF4 = consumers.FAF4.astype(int)
 
     col_map = {'bus_id': 'buyer_id',
                'NAICS6_make': 'input_commodity',
@@ -1589,6 +1600,8 @@ def firm_sim_naics_set(producers, consumers):
     #     #write the tables to an R data file
     #     save(consc,prodc, file = file.path(SCENARIO_OUTPUT_PATH,paste0(naics, ".Rdata")))
     #   }
+    naics_set.NAICS = naics_set.NAICS.apply(lambda x: x.encode('ascii'))
+    match_summary_naics.NAICS = match_summary_naics.NAICS.apply(lambda x: x.encode('ascii'))
 
     return match_summary_naics, naics_set
 
@@ -1699,8 +1712,8 @@ def firm_synthesis(
         numa_dist,
         firm_pref_weights,
         foreign_prod_values,
-        foreign_cons_values,
-        firms_est
+        foreign_cons_values
+        # firms_est
 ):
     REGRESS = False
     TRACE_TAZ = None
@@ -1728,7 +1741,11 @@ def firm_synthesis(
                                    left_on='NAICS6', right_index=True)
     foreign_cons_values = pd.merge(foreign_cons_values, NAICS2007_to_NAICS2007io, how='inner',
                                    left_on='NAICS6', right_index=True)
-    firms_est = firms_est.to_frame()
+    max_taz = numa_dist.oTAZ.max()
+    foreign_prod_values['TAZ'] = foreign_prod_values.country_code + max_taz + 1L
+    foreign_cons_values['TAZ'] = foreign_cons_values.country_code + max_taz + 1L
+    # firms_est = firms_est.to_frame()
+
 
     t0 = print_elapsed_time("load dataframes", t0, debug=True)
 
@@ -1904,7 +1921,6 @@ def firm_synthesis(
     t0 = print_elapsed_time("firm_sim_summary", t0, debug=True)
 
     inject.add_table('firms_establishments', firms)
-    inject.add_table('firm_io_pairs', firm_io_pairs)
     inject.add_table('producers', producers)
     inject.add_table('consumers', consumers)
     inject.add_table('matches_naics', matches_naics)
