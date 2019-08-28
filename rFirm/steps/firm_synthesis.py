@@ -144,11 +144,19 @@ def firm_sim_enumerate(
 
 
 def firm_sim_enumerate_foreign(firms,
+                               NAICS2007_to_NAICS2007io,
                                NAICS2007io_to_SCTG,
                                employment_categories,
                                naics_industry,
                                industry_10_5,
                                foreign_prod_values, foreign_cons_values):
+
+    # Merge the IO codes
+    foreign_prod_values = pd.merge(foreign_prod_values, NAICS2007_to_NAICS2007io, how='inner',
+                                   left_on='NAICS6', right_index=True)
+    foreign_cons_values = pd.merge(foreign_cons_values, NAICS2007_to_NAICS2007io, how='inner',
+                                   left_on='NAICS6', right_index=True)
+
     # Both for_prod and for_cons include foreign public production/consumption value.
     # Reallocate within each country to the remaining privately owned industries in
     # proportion to their prod/cons value
@@ -1147,14 +1155,15 @@ def firm_sim_producers(firms, io_values, unitcost):
     # - setkey(InputOutputValues, NAICS6_Make, ProVal)
     io_values = io_values.sort_values(by=['NAICS6_use', 'pro_val'])
 
-    # Calculate cumulative pct value of the consumption inputs grouped by output commodity
-    # - InputOutputValues[, CumPctProVal := cumsum(ProVal)/sum(ProVal), by = NAICS6_Use]
-    io_values['cum_pro_val'] = io_values.groupby('NAICS6_use')['pro_val'].transform('cumsum')
-    io_values['cum_pct_pro_val'] = \
-        io_values['cum_pro_val'] / io_values.groupby('NAICS6_use')['cum_pro_val'].transform('last')
-
-    # select NAICS6_make input commodities with highest pro_val for each NAICS6_use output
-    io_values = io_values[io_values.cum_pct_pro_val > (1 - base_variables.BASE_PROVALTHRESHOLD)]
+    # # Calculate cumulative pct value of the consumption inputs grouped by output commodity
+    # # - InputOutputValues[, CumPctProVal := cumsum(ProVal)/sum(ProVal), by = NAICS6_Use]
+    # io_values['cum_pro_val'] = io_values.groupby('NAICS6_use')['pro_val'].transform('cumsum')
+    # io_values['cum_pct_pro_val'] = \
+    #     io_values['cum_pro_val'] / io_values.groupby('NAICS6_use')['cum_pro_val'].
+    #     transform('last')
+    #
+    # # select NAICS6_make input commodities with highest pro_val for each NAICS6_use output
+    # io_values = io_values[io_values.cum_pct_pro_val > (1 - base_variables.BASE_PROVALTHRESHOLD)]
 
     # FIXME - use factors?
     # InputOutputValues[,NAICS6_Make:=factor(NAICS6_Make,levels = levels(Firms$NAICS6_Make))]
@@ -1166,13 +1175,17 @@ def firm_sim_producers(firms, io_values, unitcost):
                                                                              'emp']].\
         groupby('NAICS6_make')['emp'].sum()
 
+    # FIXME why are we summing emp again?
+    # InputOutputValues <- InputOutputValues[,.(ProVal=sum(ProVal), Emp = sum(Emp)), .(NAICS6_Make)]
+    io_values = io_values[['NAICS6_make', 'pro_val']].groupby('NAICS6_make',
+                                                              group_keys=False,
+                                                              as_index=False).sum()
+
     # - annotate input_output_values with total emp count for producers of NAICS6_input
     io_values['emp'] = \
         reindex(producer_emp_counts_by_naics, io_values.NAICS6_make)
 
-    # FIXME why are we summing emp again?
-    # InputOutputValues <- InputOutputValues[,.(ProVal=sum(ProVal), Emp = sum(Emp)), .(NAICS6_Make)]
-    io_values = io_values[['NAICS6_make', 'pro_val', 'emp']].groupby('NAICS6_make').sum()
+    io_values.set_index('NAICS6_make', inplace=True)
 
     # InputOutputValues[, ValEmp := ProVal/Emp]
     io_values['val_emp'] = io_values.pro_val / io_values.emp
@@ -1690,7 +1703,7 @@ def firm_sim_summary(output_dir, producers, consumers, firms, firm_pref_weights)
 
 def regress(df, step_name, df_name):
     file_path = 'regression_data/results/%s/outputs/x_%s.csv' % (step_name, df_name)
-    df.to_csv(file_path, index=True)
+    df.to_csv(file_path, index=True, chunksize=100000L)
 
 
 @inject.step()
@@ -1727,8 +1740,6 @@ def firm_synthesis(
     naics_industry = naics_industry.to_frame()
     industry_10_5 = industry_10_5.to_frame()
     naics_empcat = naics_empcat.to_frame()
-    taz_fips = taz_fips.to_frame()
-    taz_faf4 = taz_faf4.to_frame()
     socio_economics_taz = socio_economics_taz.to_frame()
     NAICS2007io_to_SCTG = NAICS2007io_to_SCTG.to_frame()
     input_output_values = input_output_values.to_frame()
@@ -1737,15 +1748,7 @@ def firm_synthesis(
     firm_pref_weights = firm_pref_weights.to_frame()
     foreign_prod_values = foreign_prod_values.to_frame()
     foreign_cons_values = foreign_cons_values.to_frame()
-    foreign_prod_values = pd.merge(foreign_prod_values, NAICS2007_to_NAICS2007io, how='inner',
-                                   left_on='NAICS6', right_index=True)
-    foreign_cons_values = pd.merge(foreign_cons_values, NAICS2007_to_NAICS2007io, how='inner',
-                                   left_on='NAICS6', right_index=True)
-    max_taz = numa_dist.oTAZ.max()
-    foreign_prod_values['TAZ'] = foreign_prod_values.country_code + max_taz + 1L
-    foreign_cons_values['TAZ'] = foreign_cons_values.country_code + max_taz + 1L
     # firms_est = firms_est.to_frame()
-
 
     t0 = print_elapsed_time("load dataframes", t0, debug=True)
 
@@ -1755,10 +1758,10 @@ def firm_synthesis(
         NAICS2012_to_NAICS2007)
     t0 = print_elapsed_time("firm_sim_load_firms", t0, debug=True)
 
-    if REGRESS:
-        # use uncorrected naics for regression
-        logger.warn("using uncorrected firms.naics codes for regression")
-        firms.NAICS2012 = firms.pnaics
+    # if REGRESS:
+    #     # use uncorrected naics for regression
+    #     logger.warn("using uncorrected firms.naics codes for regression")
+    #     firms.NAICS2012 = firms.pnaics
 
     logger.info("%s firms" % (firms.shape[0],))
 
@@ -1781,6 +1784,7 @@ def firm_synthesis(
     t0 = print_elapsed_time()
     firms = firm_sim_enumerate_foreign(
         firms,
+        NAICS2007_to_NAICS2007io,
         NAICS2007io_to_SCTG,
         employment_categories,
         naics_industry,
@@ -1921,7 +1925,12 @@ def firm_synthesis(
     t0 = print_elapsed_time("firm_sim_summary", t0, debug=True)
 
     inject.add_table('firms_establishments', firms)
+    firms.to_csv('firms_establishments.csv', index=True, chunksize=100000L)
     inject.add_table('producers', producers)
+    producers.to_csv('producers.csv', index=True, chunksize=100000L)
     inject.add_table('consumers', consumers)
+    consumers.to_csv('consumers.csv', index=True, chunksize=100000L)
     inject.add_table('matches_naics', matches_naics)
+    matches_naics.to_csv('matches_naics.csv', index=True, chunksize=100000L)
     inject.add_table('naics_set', naics_set)
+    naics_set.to_csv('naics_set.csv', index=True, chunksize=100000L)
