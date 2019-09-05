@@ -535,6 +535,15 @@ def firm_sim_scale_employees(
     employment['avg_emp'] = reindex(firms.groupby('model_emp_cat')['emp'].median(),
                                     employment.model_emp_cat)
 
+    # FIXME Steps
+    # Identify TAZ to be assigned
+    # Identify TAZ that has the capacity to distribute
+    # Identify how many to move to TAZ that has zero CBP employment
+    # Loop over model employment category until TAZ identified in step 1 has establishments
+    # Select establishments randomly based on probability determined by available
+    # employment (over SE requirement) and distance.
+    # Recalculate TAZ level statistics based on relocated establishments and continue.
+
     # Identify TAZ and model_emp_cat that needs to be reallocated somewhere else
     employment['to_assign'] = employment['emp_CBP'] < 1
     employment['to_distribute'] = (~(employment['to_assign']) & ((employment['n_est']) > 1))
@@ -659,6 +668,16 @@ def firm_sim_scale_employees(
     t0 = print_elapsed_time("firm_sim_scale_employees relocating to zero CBP \nzero+ SE NUMA",
                             t0,
                             debug=True)
+
+    # FIXME Steps
+    # Identify TAZ that has the capacity to distribute
+    # Identify TAZ to be assigned
+    # Identify how many to move from the TAZ
+    # Loop over model employment category until TAZ identified in step 1 has establishments
+    # less than or equal to employment.
+    # Select establishments randomly based on probability determined by expected number
+    # of employee required to match SE data and distance.
+    # Recalculate TAZ level statistics based on relocated establishments and continue.
 
     # Identify TAZ and model_emp_cat that needs to be reallocated somewhere else
     emp_to_check = 'emp_SE'
