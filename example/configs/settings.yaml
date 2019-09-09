@@ -32,15 +32,15 @@ input_tables:
       StateFIPS: state_FIPS
   taz_faf4:
     filename: corresp_taz_faf4.csv
-  unitcost:
+  unit_cost:
     filename: data_unitcost.csv
     column_map:
       Commodity_SCTG: SCTG
       UnitCost: unit_cost
       #Commodity_SCTG,UnitCost,Tons,Value
     index_col: SCTG
-  firm_pref_weights:
-    filename: data_firm_pref_weights.csv
+  est_pref_weights:
+    filename: data_est_pref_weights.csv
     column_map:
       Commodity_SCTG: SCTG
       CostWeight: cost_weight
@@ -119,8 +119,8 @@ scenario_input_tables:
     filename: lehdtazm.csv
     index_col: TAZ
 
-firm_synthesis_tables:
-  firms_establishments:
+est_synthesis_tables:
+  ests_establishments:
     filename: *firms_file_name
     column_map:
       estid: bus_id
@@ -153,9 +153,9 @@ run_list:
 #    - firm_synthesis_consumers
 #    - firm_synthesis_naics_set
 #    - firm_synthesis_summary
-    - firm_synthesis
+    - est_synthesis
     - write_data_dictionary
-    - write_tables
+#    - write_tables
 
   #resume_after: firm_synthesis_consumers
 
@@ -169,10 +169,10 @@ run_list:
 #  tables:
 #    - cbp
 #
-output_tables:
-  action: include
-  tables:
-    - matches_naics
-    - naics_set
+#output_tables:
+#  action: include
+#  tables:
+#    - matches_naics
+#    - naics_set
 
 
