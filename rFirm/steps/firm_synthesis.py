@@ -1124,7 +1124,7 @@ def est_sim_producers(est, io_values, unitcost):
     producers['output_commodity'] = producers['NAICS']
 
     # FIXME convert producers to dictionary of data-frame for ease of storage
-    producers = dict(tuple(producers.groupby('NAICS')))
+    producers = dict(tuple(producers.groupby(['NAICS', 'SCTG'])))
 
     return producers
 
@@ -1430,10 +1430,10 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     # consumers['input_commodity'] = consumers['NAICS']
 
     # FIXME store consumers as a dictionary of data-frame for ease of storage
-    consumers = dict(tuple(consumers.groupby('NAICS')))
-    consumers_foreign = dict(tuple(consumers_foreign.groupby('NAICS')))
-    consumers = {naics: pd.concat([df, consumers_foreign.get(naics)], ignore_index=True) for
-                 naics, df in consumers.iteritems()}
+    consumers = dict(tuple(consumers.groupby(['NAICS', 'SCTG'])))
+    consumers_foreign = dict(tuple(consumers_foreign.groupby(['NAICS', 'SCTG'])))
+    consumers = {naics_sctg: pd.concat([df, consumers_foreign.get(naics_sctg)], ignore_index=True) for
+                 naics_sctg, df in consumers.iteritems()}
 
     return consumers
 
@@ -1810,12 +1810,12 @@ def est_synthesis(
     est_sim_summary(output_dir, producers, consumers, est, est_pref_weights)
     t0 = print_elapsed_time("est_sim_summary", t0, debug=True)
 
-    inject.add_table('ests_establishments', est)
-    for naics, df in producers.iteritems():
-        table_name = 'producers_' + naics
-        inject.add_table(table_name, df)
-    for naics, df in consumers.iteritems():
-        table_name = 'consumers_' + naics
-        inject.add_table(table_name, df)
+    inject.add_table('ests_establishments', est.reset_index())
+    for naics_sctg, df in producers.iteritems():
+        table_name = 'producers_' + '_'.join(map(str, naics_sctg)).rstrip('\.0')
+        inject.add_table(table_name, df.reset_index())
+    for naics_sctg, df in consumers.iteritems():
+        table_name = 'consumers_' + '_'.join(map(str, naics_sctg)).rstrip('\.0')
+        inject.add_table(table_name, df.reset_index())
     inject.add_table('matches_naics', matches_naics)
     inject.add_table('naics_set', naics_set)

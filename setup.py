@@ -32,5 +32,6 @@ setup(
         'zbox >= 1.2',
         'psutil >= 4.1',
         'activitysim > 0.5',
+        'scipy >= 1.2.1',
     ]
 )

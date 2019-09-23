@@ -2,13 +2,12 @@
 #store: pipeline.h5
 
 firms_file_name: &firms_file_name firms_test.csv
-store: test_pipeline.h5
+pipeline: test_pipeline.h5
 
 #data_dir: sample_data
 
 scenarios_dir: scenarios
 scenario_name: base
-output_dir: scenarios/base/output
 
 # input_pre_processor input_tables
 input_tables:
