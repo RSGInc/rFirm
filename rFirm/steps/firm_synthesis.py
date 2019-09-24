@@ -150,7 +150,6 @@ def est_sim_enumerate_foreign(est,
                               naics_industry,
                               industry_10_5,
                               foreign_prod_values, foreign_cons_values):
-
     # Merge the IO codes
     foreign_prod_values = pd.merge(foreign_prod_values, NAICS2007_to_NAICS2007io, how='inner',
                                    left_on='NAICS6', right_index=True)
@@ -463,7 +462,7 @@ def est_sim_scale_employees(
     # employment range
 
     # number of establishments by employment size category
-    est_size = est.groupby(['esizecat', 'emp_range', 'low_emp']).size().to_frame('est_n').\
+    est_size = est.groupby(['esizecat', 'emp_range', 'low_emp']).size().to_frame('est_n'). \
         reset_index()
     est_size['est_emp_range'] = est_size['est_n'] / est_size['emp_range']
     # Hyman interpolator to interpolate number of establishments between the low and
@@ -586,7 +585,7 @@ def est_sim_scale_employees(
                     emp_assign.dTAZ).fillna(0).clip_lower(0)
                 dist_multiplier = 1000.0
                 emp_multiplier = 0.01
-                emp_assign['prob'] = (dist_multiplier * emp_assign['distance'].rdiv(1)) +\
+                emp_assign['prob'] = (dist_multiplier * emp_assign['distance'].rdiv(1)) + \
                                      (emp_multiplier * (emp_assign['emp_avail'] /
                                                         emp_assign['avg_emp']))
                 emp_assign.loc[emp_assign.emp_avail < 1, 'prob'] = 0
@@ -661,7 +660,7 @@ def est_sim_scale_employees(
         employment.loc[employment['emp_CBP'] > 0, 'to_move'] = 0.0
 
         # drop rows where both employment sources say there should be no employment in empcat
-        rem_assign = employment[~employment.model_emp_cat.isin(emp_cats_not_in_ests)].\
+        rem_assign = employment[~employment.model_emp_cat.isin(emp_cats_not_in_ests)]. \
             to_assign.sum()
         # print 'Establishments remaining to be moved :%d\n' % rem_distribute
 
@@ -711,7 +710,7 @@ def est_sim_scale_employees(
                 emp_distribute.loc[emp_distribute.emp_reqd < 0, 'emp_reqd'] = 0
                 dist_multiplier = 1000.0
                 emp_multiplier = 0.01
-                emp_distribute['prob'] = (dist_multiplier * emp_distribute['distance'].rdiv(1)) +\
+                emp_distribute['prob'] = (dist_multiplier * emp_distribute['distance'].rdiv(1)) + \
                                          (emp_multiplier * (emp_distribute['emp_reqd'] /
                                                             emp_distribute['avg_emp']))
                 emp_distribute.loc[emp_distribute.emp_reqd == 0, 'prob'] = 0
@@ -736,12 +735,12 @@ def est_sim_scale_employees(
                                                                               p=grp.prob))
                 taz_select = taz_select.apply(pd.Series).stack().to_frame('dTAZ').astype(int)
                 bus_select = est_sub[est_sub.TAZ.isin(taz_select.index.get_level_values('oTAZ').
-                                                      unique().tolist())].\
-                    groupby('TAZ').\
+                                                      unique().tolist())]. \
+                    groupby('TAZ'). \
                     apply(lambda grp: prng.choice(grp.index, grp.to_move.unique().astype(int),
                                                   replace=False,
                                                   p=(grp.emp / grp.emp.sum())))
-                bus_select = bus_select.apply(pd.Series).stack().to_frame('bus_id').\
+                bus_select = bus_select.apply(pd.Series).stack().to_frame('bus_id'). \
                     astype(int)
                 taz_select.index.names = ['TAZ', None]
                 est_moved = pd.merge(bus_select, taz_select, how='inner', left_index=True,
@@ -850,7 +849,8 @@ def est_sim_scale_employees(
     firms.emp.fillna(0, inplace=True)
     firms = firms.assign(emp=lambda df: df.groupby('firm_id')['emp'].transform('sum'))
     firms['fsizecat'] = pd.cut(x=firms.emp,
-                               bins=np.append(firm_employment_categories.low_threshold.values, np.inf),
+                               bins=np.append(firm_employment_categories.low_threshold.values,
+                                              np.inf),
                                labels=firm_employment_categories.id,
                                include_lowest=True).astype(int)
     return est, firms
@@ -1083,7 +1083,7 @@ def est_sim_producers(est, io_values, unitcost):
     # - total number of domestic employees manufacturing NAICS6_make commodity
     producer_emp_counts_by_naics = \
         producers[(~producers.state_FIPS.isnull()) & domestic_producer_idx][['NAICS6_make',
-                                                                             'emp']].\
+                                                                             'emp']]. \
         groupby('NAICS6_make')['emp'].sum()
 
     # FIXME why are we summing emp again?
@@ -1233,7 +1233,7 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     # - Calcuate value per employee required (US domestic employment) for each NAICS6_make code
     # FIXME - use FAF4 filters to filter domestic ests
     domestic_emp_counts_by_naics = \
-        est[(~est.state_FIPS.isnull())][['NAICS6_make', 'emp']].\
+        est[(~est.state_FIPS.isnull())][['NAICS6_make', 'emp']]. \
         groupby('NAICS6_make')['emp'].sum()
 
     # - drop io_values rows where there are no domestic producers of the output commodity
@@ -1346,7 +1346,7 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
         424200, 424600, 424600, 423400, 423300, 423300, 424100, 424100, 424100, 424300,
         423500, 423500, 423700, 423800, 425100, 423100, 423100, 425100, 423200, 423900])
     i = (pairs_NAICS6_use2 != '42') & (consumers.SCTG < 41) & (temp_rand < 0.3)
-    consumers.loc[i[i].index, 'NAICS6_make'] = sctg_whl[consumers.loc[i[i].index, 'SCTG']].\
+    consumers.loc[i[i].index, 'NAICS6_make'] = sctg_whl[consumers.loc[i[i].index, 'SCTG']]. \
         astype(str)
 
     # Pairs[NAICS6_Use2 != "42" & temprand < 0.15 & SCTG %in% c(35, 38), NAICS6_Make := "423600"]
@@ -1441,7 +1441,8 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     # FIXME store consumers as a dictionary of data-frame for ease of storage
     consumers = dict(tuple(consumers.groupby(['NAICS', 'SCTG'])))
     consumers_foreign = dict(tuple(consumers_foreign.groupby(['NAICS', 'SCTG'])))
-    consumers = {naics_sctg: pd.concat([df, consumers_foreign.get(naics_sctg)], ignore_index=True) for
+    consumers = {naics_sctg: pd.concat([df, consumers_foreign.get(naics_sctg)],
+                                       ignore_index=True) for
                  naics_sctg, df in consumers.iteritems()}
 
     return consumers
@@ -1486,8 +1487,8 @@ def est_sim_naics_set(producers, consumers):
 
     # - matching consumers and suppliers -- by NAICS codes
     producers_summary_naics = \
-        producers[['output_commodity', 'size', 'output_capacity_tons']].\
-        groupby('output_commodity').\
+        producers[['output_commodity', 'size', 'output_capacity_tons']]. \
+        groupby('output_commodity'). \
         agg({'size': ['count', 'sum'], 'output_capacity_tons': 'sum'})
     producers_summary_naics.columns = producers_summary_naics.columns.map('_'.join)
     producers_summary_naics.reset_index(inplace=True)  # explicit output_commodity column
@@ -1498,8 +1499,8 @@ def est_sim_naics_set(producers, consumers):
                                    inplace=True)
 
     consumers_summary_naics = \
-        consumers[['input_commodity', 'size', 'purchase_amount_tons']].\
-        groupby('input_commodity').\
+        consumers[['input_commodity', 'size', 'purchase_amount_tons']]. \
+        groupby('input_commodity'). \
         agg({'size': ['count', 'sum'], 'purchase_amount_tons': 'sum'})
     consumers_summary_naics.columns = consumers_summary_naics.columns.map('_'.join)
     consumers_summary_naics.reset_index(inplace=True)  # explicit input_commodity column
@@ -1593,8 +1594,8 @@ def est_sim_summary(output_dir, producers, consumers, ests, est_pref_weights):
 
     # - producers_emp_by_sctg
     producers_emp_by_sctg = \
-        producers[['SCTG', 'size', 'output_capacity_tons']].\
-        groupby('SCTG').\
+        producers[['SCTG', 'size', 'output_capacity_tons']]. \
+        groupby('SCTG'). \
         agg({'size': ['count', 'sum'], 'output_capacity_tons': 'sum'})
     producers_emp_by_sctg.columns = producers_emp_by_sctg.columns.map('_'.join)
     producers_emp_by_sctg.rename(columns={'size_count': 'producers',
@@ -1648,8 +1649,10 @@ def regress(df, step_name, df_name):
     file_path = 'regression_data/results/%s/outputs/x_%s.csv' % (step_name, df_name)
     df.to_csv(file_path, index=True, chunksize=100000L)
 
+
 def est_firm_extract(est_firms):
-    est_cols = ['pnaics', 'NAICS2012', 'county_FIPS', 'state_FIPS', 'FAF4', 'TAZ', 'n2', 'n4', 'esizecat', 'emp']
+    est_cols = ['pnaics', 'NAICS2012', 'county_FIPS', 'state_FIPS', 'FAF4', 'TAZ', 'n2', 'n4',
+                'esizecat', 'emp']
     firm_cols = ['firm_id', 'naics_firm', 'county_FIPS_firm', 'state_FIPS_firm', 'FAF4_firm',
                  'TAZ_firm', 'n2_firm', 'n4_firm', 'fsizecat']
     est = est_firms.loc[:, est_cols]
@@ -1757,8 +1760,9 @@ def est_synthesis(
 
     # - est_sim_scale_employees
     t0 = print_elapsed_time()
-    est, firms = est_sim_scale_employees(est, firms, employment_categories, firm_employment_categories, naics_empcat,
-                                  socio_economics_taz, numa_dist)
+    est, firms = est_sim_scale_employees(est, firms, employment_categories,
+                                         firm_employment_categories, naics_empcat,
+                                         socio_economics_taz, numa_dist)
     t0 = print_elapsed_time("est_sim_scale_employees", t0, debug=True)
 
     if REGRESS:
@@ -1837,10 +1841,10 @@ def est_synthesis(
     inject.add_table('establishments', est.reset_index())
     inject.add_table('firms', firms.reset_index())
     for naics_sctg, df in producers.iteritems():
-        table_name = 'producers_' + '_'.join(map(str, naics_sctg)).rstrip('\.0')
+        table_name = 'producers_' + '_'.join(map(str, naics_sctg)).rstrip('.0')
         inject.add_table(table_name, df)
     for naics_sctg, df in consumers.iteritems():
-        table_name = 'consumers_' + '_'.join(map(str, naics_sctg)).rstrip('\.0')
+        table_name = 'consumers_' + '_'.join(map(str, naics_sctg)).rstrip('.0')
         inject.add_table(table_name, df)
     inject.add_table('matches_naics', matches_naics)
     inject.add_table('naics_set', naics_set)
