@@ -444,7 +444,9 @@ def est_emp_generator(
 
 def est_sim_scale_employees(
         est,
+        firms,
         employment_categories,
+        firm_employment_categories,
         naics_empcat,
         socio_economics_taz,
         numa_dist):
@@ -844,7 +846,14 @@ def est_sim_scale_employees(
                include_lowest=True).astype(int)
     assert not est.esizecat.isnull().any()
 
-    return est
+    firms['emp'] = est['emp']
+    firms.emp.fillna(0, inplace=True)
+    firms = firms.assign(emp=lambda df: df.groupby('firm_id')['emp'].transform('sum'))
+    firms['fsizecat'] = pd.cut(x=firms.emp,
+                               bins=np.append(firm_employment_categories.low_threshold.values, np.inf),
+                               labels=firm_employment_categories.id,
+                               include_lowest=True).astype(int)
+    return est, firms
 
 
 def est_sim_assign_SCTG(
@@ -1639,6 +1648,14 @@ def regress(df, step_name, df_name):
     file_path = 'regression_data/results/%s/outputs/x_%s.csv' % (step_name, df_name)
     df.to_csv(file_path, index=True, chunksize=100000L)
 
+def est_firm_extract(est_firms):
+    est_cols = ['pnaics', 'NAICS2012', 'county_FIPS', 'state_FIPS', 'FAF4', 'TAZ', 'n2', 'n4', 'esizecat', 'emp']
+    firm_cols = ['firm_id', 'naics_firm', 'county_FIPS_firm', 'state_FIPS_firm', 'FAF4_firm',
+                 'TAZ_firm', 'n2_firm', 'n4_firm', 'fsizecat']
+    est = est_firms.loc[:, est_cols]
+    firms = est_firms.loc[:, firm_cols]
+    return est, firms
+
 
 @inject.step()
 def est_synthesis(
@@ -1647,6 +1664,7 @@ def est_synthesis(
         NAICS2007_to_NAICS2007io,
         NAICS2012_to_NAICS2007io,
         employment_categories,
+        firm_employment_categories,
         naics_industry,
         industry_10_5,
         naics_empcat,
@@ -1671,6 +1689,7 @@ def est_synthesis(
     NAICS2007_to_NAICS2007io = NAICS2007_to_NAICS2007io.to_frame()
     NAICS2012_to_NAICS2007io = NAICS2012_to_NAICS2007io.to_frame()
     employment_categories = employment_categories.to_frame()
+    firm_employment_categories = firm_employment_categories.to_frame()
     naics_industry = naics_industry.to_frame()
     industry_10_5 = industry_10_5.to_frame()
     naics_empcat = naics_empcat.to_frame()
@@ -1688,7 +1707,7 @@ def est_synthesis(
 
     # - est_sim_load_ests
     t0 = print_elapsed_time()
-    est = est_sim_load_establishments(NAICS2012_to_NAICS2007)
+    est_firms = est_sim_load_establishments(NAICS2012_to_NAICS2007)
     t0 = print_elapsed_time("est_sim_load_ests", t0, debug=True)
 
     # if REGRESS:
@@ -1696,7 +1715,12 @@ def est_synthesis(
     #     logger.warn("using uncorrected ests.naics codes for regression")
     #     ests.NAICS2012 = ests.pnaics
 
-    logger.info("%s ests" % (est.shape[0],))
+    logger.info("%s ests" % (est_firms.shape[0],))
+
+    # - separate firms and establishments
+    t0 = print_elapsed_time()
+    est, firms = est_firm_extract(est_firms)
+    t0 = print_elapsed_time("est_firm_extract", t0, debug=True)
 
     # - est_sim_enumerate
     t0 = print_elapsed_time()
@@ -1733,8 +1757,8 @@ def est_synthesis(
 
     # - est_sim_scale_employees
     t0 = print_elapsed_time()
-    est = est_sim_scale_employees(est, employment_categories, naics_empcat, socio_economics_taz,
-                                  numa_dist)
+    est, firms = est_sim_scale_employees(est, firms, employment_categories, firm_employment_categories, naics_empcat,
+                                  socio_economics_taz, numa_dist)
     t0 = print_elapsed_time("est_sim_scale_employees", t0, debug=True)
 
     if REGRESS:
@@ -1810,12 +1834,13 @@ def est_synthesis(
     est_sim_summary(output_dir, producers, consumers, est, est_pref_weights)
     t0 = print_elapsed_time("est_sim_summary", t0, debug=True)
 
-    inject.add_table('ests_establishments', est.reset_index())
+    inject.add_table('establishments', est.reset_index())
+    inject.add_table('firms', firms.reset_index())
     for naics_sctg, df in producers.iteritems():
         table_name = 'producers_' + '_'.join(map(str, naics_sctg)).rstrip('\.0')
-        inject.add_table(table_name, df.reset_index())
+        inject.add_table(table_name, df)
     for naics_sctg, df in consumers.iteritems():
         table_name = 'consumers_' + '_'.join(map(str, naics_sctg)).rstrip('\.0')
-        inject.add_table(table_name, df.reset_index())
+        inject.add_table(table_name, df)
     inject.add_table('matches_naics', matches_naics)
     inject.add_table('naics_set', naics_set)
