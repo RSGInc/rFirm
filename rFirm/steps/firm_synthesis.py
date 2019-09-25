@@ -1810,7 +1810,7 @@ def est_synthesis(
     est_sim_summary(output_dir, producers, consumers, est, est_pref_weights)
     t0 = print_elapsed_time("est_sim_summary", t0, debug=True)
 
-    inject.add_table('ests_establishments', est)
+    inject.add_table('ests_establishments', est.reset_index())
     for naics, df in producers.iteritems():
         table_name = 'producers_' + naics
         inject.add_table(table_name, df)
