@@ -2,13 +2,12 @@
 #store: pipeline.h5
 
 firms_file_name: &firms_file_name firms_test.csv
-store: test_pipeline.h5
+pipeline: test_pipeline.h5
 
 #data_dir: sample_data
 
 scenarios_dir: scenarios
 scenario_name: base
-output_dir: scenarios/base/output
 
 # input_pre_processor input_tables
 input_tables:
@@ -52,6 +51,11 @@ input_tables:
     filename: EmploymentCategories.csv
     column_map:
       EstablishmentSize: esizecat
+      ID: id
+  firm_employment_categories:
+    filename: FirmEmploymentCategories.csv
+    column_map:
+      FirmSize: fsizecat
       ID: id
   input_output_values:
     filename: InputOutputValues.csv
@@ -124,9 +128,21 @@ est_synthesis_tables:
     filename: *firms_file_name
     column_map:
       estid: bus_id
-      TAZ1: TAZ
-      CountyFIPS: county_FIPS
-      StateFIPS: state_FIPS
+      naics.est: naics
+      n2.est: n2
+      n4.est: n4
+      TAZ.est: TAZ
+      CountyFIPS.est: county_FIPS
+      StateFIPS.est: state_FIPS
+      FAF4.est: FAF4
+      firmid: firm_id
+      naics.firm: naics_firm
+      n2.firm: n2_firm
+      n4.firm: n4_firm
+      TAZ.firm: TAZ_firm
+      CountyFIPS.firm: county_FIPS_firm
+      StateFIPS.firm: state_FIPS_firm
+      FAF4.firm: FAF4_firm
       #naics: NAICS2012
     index_col: bus_id
 
