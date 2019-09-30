@@ -1439,8 +1439,8 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     # consumers['input_commodity'] = consumers['NAICS']
 
     # FIXME store consumers as a dictionary of data-frame for ease of storage
-    consumers = dict(tuple(consumers.groupby(['NAICS', 'SCTG'])))
-    consumers_foreign = dict(tuple(consumers_foreign.groupby(['NAICS', 'SCTG'])))
+    consumers = dict(tuple(consumers.groupby(['input_commodity', 'SCTG'])))
+    consumers_foreign = dict(tuple(consumers_foreign.groupby(['input_commodity', 'SCTG'])))
     consumers = {naics_sctg: pd.concat([df, consumers_foreign.get(naics_sctg)],
                                        ignore_index=True) for
                  naics_sctg, df in consumers.iteritems()}
@@ -1671,8 +1671,6 @@ def est_synthesis(
         naics_industry,
         industry_10_5,
         naics_empcat,
-        taz_fips,
-        taz_faf4,
         socio_economics_taz,
         NAICS2007io_to_SCTG,
         input_output_values,
@@ -1681,7 +1679,6 @@ def est_synthesis(
         est_pref_weights,
         foreign_prod_values,
         foreign_cons_values
-        # ests_est
 ):
     REGRESS = False
     TRACE_TAZ = None
@@ -1841,10 +1838,10 @@ def est_synthesis(
     inject.add_table('establishments', est.reset_index())
     inject.add_table('firms', firms.reset_index())
     for naics_sctg, df in producers.iteritems():
-        table_name = 'producers_' + '_'.join(map(str, naics_sctg)).rstrip('.0')
+        table_name = 'producers_' + '_'.join(map(str, naics_sctg)).partition('.')[0]
         inject.add_table(table_name, df)
     for naics_sctg, df in consumers.iteritems():
-        table_name = 'consumers_' + '_'.join(map(str, naics_sctg)).rstrip('.0')
+        table_name = 'consumers_' + '_'.join(map(str, naics_sctg)).partition('.')[0]
         inject.add_table(table_name, df)
     inject.add_table('matches_naics', matches_naics)
     inject.add_table('naics_set', naics_set)
