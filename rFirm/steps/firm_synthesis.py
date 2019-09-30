@@ -1487,8 +1487,8 @@ def est_sim_naics_set(producers, consumers):
 
     # - matching consumers and suppliers -- by NAICS codes
     producers_summary_naics = \
-        producers[['output_commodity', 'size', 'output_capacity_tons']]. \
-        groupby('output_commodity'). \
+        producers[['output_commodity', 'SCTG', 'size', 'output_capacity_tons']]. \
+        groupby(['output_commodity', 'SCTG']). \
         agg({'size': ['count', 'sum'], 'output_capacity_tons': 'sum'})
     producers_summary_naics.columns = producers_summary_naics.columns.map('_'.join)
     producers_summary_naics.reset_index(inplace=True)  # explicit output_commodity column
@@ -1499,8 +1499,8 @@ def est_sim_naics_set(producers, consumers):
                                    inplace=True)
 
     consumers_summary_naics = \
-        consumers[['input_commodity', 'size', 'purchase_amount_tons']]. \
-        groupby('input_commodity'). \
+        consumers[['input_commodity', 'SCTG', 'size', 'purchase_amount_tons']]. \
+        groupby(['input_commodity', 'SCTG']). \
         agg({'size': ['count', 'sum'], 'purchase_amount_tons': 'sum'})
     consumers_summary_naics.columns = consumers_summary_naics.columns.map('_'.join)
     consumers_summary_naics.reset_index(inplace=True)  # explicit input_commodity column
@@ -1511,14 +1511,14 @@ def est_sim_naics_set(producers, consumers):
                                    inplace=True)
 
     match_summary_naics = pd.merge(
-        left=producers_summary_naics[['NAICS', 'producers', 'output_capacity']],
-        right=consumers_summary_naics[['NAICS', 'consumers', 'input_requirements']],
-        left_on='NAICS',
-        right_on='NAICS',
+        left=producers_summary_naics[['NAICS', 'SCTG', 'producers', 'output_capacity']],
+        right=consumers_summary_naics[['NAICS', 'SCTG', 'consumers', 'input_requirements']],
+        left_on=['NAICS', 'SCTG'],
+        right_on=['NAICS', 'SCTG'],
         how='outer'
     )
 
-    match_summary_naics = match_summary_naics[["NAICS", "producers", "consumers",
+    match_summary_naics = match_summary_naics[["NAICS", "SCTG", "producers", "consumers",
                                                "output_capacity", "input_requirements"]]
 
     match_summary_naics['ratio_output'] = \
@@ -1529,7 +1529,7 @@ def est_sim_naics_set(producers, consumers):
     # - Get number of (none NA) matches by NAICS, and check for imbalance in producers and consumers
 
     naics_set = match_summary_naics[~match_summary_naics.possible_matches.isnull()]
-    naics_set = naics_set[["NAICS", "producers", "consumers", "possible_matches"]]
+    naics_set = naics_set[["NAICS", "SCTG", "producers", "consumers", "possible_matches"]]
 
     naics_set['con_prod_ratio'] = naics_set.consumers / naics_set.producers
 
@@ -1551,7 +1551,7 @@ def est_sim_naics_set(producers, consumers):
     #     #write the tables to an R data file
     #     save(consc,prodc, file = file.path(SCENARIO_OUTPUT_PATH,paste0(naics, ".Rdata")))
     #   }
-    naics_set.NAICS = naics_set.NAICS.apply(lambda x: x.encode('ascii'))
+    naics_set.NAICS = naics_set.NAICS.astype('str')
     match_summary_naics.NAICS = match_summary_naics.NAICS.apply(lambda x: x.encode('ascii'))
 
     return match_summary_naics, naics_set

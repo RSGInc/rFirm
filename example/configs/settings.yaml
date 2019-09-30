@@ -171,7 +171,7 @@ run_list:
 #    - firm_synthesis_summary
     - est_synthesis
     - write_data_dictionary
-#    - write_tables
+    - write_tables
 
   #resume_after: firm_synthesis_consumers
 
@@ -180,10 +180,26 @@ run_list:
 # output_tables can specify either a list of output tables to include or to skip
 # if neither is specified, then all checkpointed tables will be written
 #
-#output_tables:
-#  action: skip
-#  tables:
-#    - cbp
+output_tables:
+  action: skip
+  tables:
+    - naics_industry
+    - industry_10_5
+    - naics_empcat
+    - taz_fips
+    - taz_faf4
+    - unit_cost
+    - est_pref_weights
+    - employment_categories
+    - firm_employment_categories
+    - input_output_values
+    - NAICS2007_to_NAICS2007io
+    - NAICS2012_to_NAICS2007io
+    - NAICS2012_to_NAICS2007
+    - NAICS2007io_to_SCTG
+    - foreign_prod_values
+    - foreign_cons_values
+    - numa_dist
 #
 #output_tables:
 #  action: include
