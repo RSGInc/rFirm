@@ -323,7 +323,7 @@ def est_sim_enumerate_foreign(est,
     foreign_producers['producer'] = True
     foreign_consumers['producer'] = False
 
-    ests_foreign = pd.concat([foreign_producers, foreign_consumers], ignore_index=True)
+    ests_foreign = foreign_producers.append(foreign_consumers, ignore_index=True)
     ests_foreign.rename(columns={'NAICS6': 'NAICS2007', 'NAICSio': 'NAICS6_make'},
                         inplace=True)
     ests_foreign = ests_foreign[~ests_foreign.NAICS6_make.isnull()].copy()
@@ -369,7 +369,7 @@ def est_sim_enumerate_foreign(est,
     ests_foreign.index = ests_foreign.index + max_bus_id + 1L
     ests_foreign.index.name = est.index.name
 
-    est = pd.concat([est, ests_foreign])
+    est = est.append(ests_foreign) #pd.concat([est, ests_foreign])
     est.loc[est.FAF4 > 800, 'county_FIPS'] = 0
     est.loc[est.FAF4 > 800, 'state_FIPS'] = 0
 
@@ -1067,6 +1067,9 @@ def est_sim_producers(est, io_values, unitcost):
     producers = est[est.producer]
     domestic_producer_idx = producers.FAF4 < 800
 
+    # - get the max_bus_id
+    MAX_BUS_ID = est[est.FAF4 < 800].index.max()
+
     # we only want i/o pairs that use domestic producers commodity as an input
     # FIXME how should we handle foreign production
     # FIXME there are i/o codes in foreign producers that do not exist in
@@ -1116,6 +1119,8 @@ def est_sim_producers(est, io_values, unitcost):
     # compute producer capacity
     producers['unit_cost'] = reindex(unitcost.unit_cost, producers.SCTG)
     producers['prod_cap'] = producers.prod_val * 1E6 / producers.unit_cost
+    producers.loc[producers.FAF4 > 800, 'bus_id'] = np.arange(0, (producers.FAF4 > 800).sum()) + \
+                                                    MAX_BUS_ID + 1
 
     col_map = {'bus_id': 'seller_id',
                'NAICS6_make': 'NAICS',
@@ -1131,14 +1136,16 @@ def est_sim_producers(est, io_values, unitcost):
 
     # FIXME is this supposed to duplicate or rename?
     producers['output_commodity'] = producers['NAICS']
+    # Return the maximum seller_id
+    MAX_BUS_ID = producers.seller_id.max()
 
     # FIXME convert producers to dictionary of data-frame for ease of storage
     producers = dict(tuple(producers.groupby(['NAICS', 'SCTG'])))
 
-    return producers
+    return producers, MAX_BUS_ID
 
 
-def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_weights):
+def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_weights, MAX_BUS_ID):
     """
     Create Consumers
 
@@ -1387,6 +1394,7 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
                                  right=io_values[['NAICS6_use', 'NAICS6_make', 'pct_pro_val']],
                                  on='NAICS6_make',
                                  how='inner')
+    consumers_foreign['bus_id'] = np.arange(0L, consumers_foreign.shape[0]) + MAX_BUS_ID + 1
     consumers_foreign.pct_pro_val.fillna(0, inplace=True)
     consumers_foreign['con_val'] = consumers_foreign.prod_val * 1E6 * consumers_foreign.pct_pro_val
     consumers_foreign['unit_cost'] = reindex(unitcost.unit_cost, consumers_foreign.SCTG)
@@ -1441,8 +1449,7 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     # FIXME store consumers as a dictionary of data-frame for ease of storage
     consumers = dict(tuple(consumers.groupby(['input_commodity', 'SCTG'])))
     consumers_foreign = dict(tuple(consumers_foreign.groupby(['input_commodity', 'SCTG'])))
-    consumers = {naics_sctg: pd.concat([df, consumers_foreign.get(naics_sctg)],
-                                       ignore_index=True) for
+    consumers = {naics_sctg: df.append(consumers_foreign.get(naics_sctg), ignore_index=True) for
                  naics_sctg, df in consumers.iteritems()}
 
     return consumers
@@ -1798,7 +1805,7 @@ def est_synthesis(
 
     # - est_sim_producers
     t0 = print_elapsed_time()
-    producers = est_sim_producers(est, input_output_values, unit_cost)
+    producers, MAX_BUS_ID = est_sim_producers(est, input_output_values, unit_cost)
     t0 = print_elapsed_time("est_sim_producers", t0, debug=True)
 
     logger.info('%s producers' % (np.sum([df.shape[0] for df in producers.itervalues()]),))
@@ -1809,7 +1816,7 @@ def est_synthesis(
     # - est_sim_consumers
     t0 = print_elapsed_time()
     consumers = est_sim_consumers(est, input_output_values, NAICS2007io_to_SCTG, unit_cost,
-                                  est_pref_weights)
+                                  est_pref_weights, MAX_BUS_ID)
     t0 = print_elapsed_time("est_sim_consumers", t0, debug=True)
 
     logger.info('%s consumers' % (np.sum([df.shape[0] for df in consumers.itervalues()]),))
