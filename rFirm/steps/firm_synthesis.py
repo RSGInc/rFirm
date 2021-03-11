@@ -20,8 +20,11 @@ from activitysim.core.tracing import print_elapsed_time
 from activitysim.core.config import setting
 from activitysim.core.util import reindex
 
+from ortools.sat.python import cp_model
+
 from rFirm.util import read_table
 from rFirm.util import round_preserve_threshold
+from rFirm.util import bucket_round
 
 import rFirm.base_variables as base_variables
 
@@ -144,17 +147,25 @@ def est_sim_enumerate(
 
 
 def est_sim_enumerate_foreign(est,
-                              NAICS2007_to_NAICS2007io,
+                              NAICS2012_to_NAICS2007io,
                               NAICS2007io_to_SCTG,
                               employment_categories,
                               naics_industry,
                               industry_10_5,
                               foreign_prod_values, foreign_cons_values):
     # Merge the IO codes
-    foreign_prod_values = pd.merge(foreign_prod_values, NAICS2007_to_NAICS2007io, how='inner',
+    foreign_prod_values = pd.merge(foreign_prod_values, NAICS2012_to_NAICS2007io.set_index('NAICS'), how='inner',
                                    left_on='NAICS6', right_index=True)
-    foreign_cons_values = pd.merge(foreign_cons_values, NAICS2007_to_NAICS2007io, how='inner',
+    foreign_cons_values = pd.merge(foreign_cons_values, NAICS2012_to_NAICS2007io.set_index('NAICS'), how='inner',
                                    left_on='NAICS6', right_index=True)
+
+    # Update production and consumption values based on proportion observed
+    foreign_prod_values['pro_val'] = foreign_prod_values['pro_val']*foreign_prod_values['proportion']
+    foreign_cons_values['con_val'] = foreign_cons_values['con_val']*foreign_cons_values['proportion']
+
+    # Reset the index
+    foreign_prod_values = foreign_prod_values.reset_index(drop=True)
+    foreign_cons_values = foreign_cons_values.reset_index(drop=True)
 
     # Both for_prod and for_cons include foreign public production/consumption value.
     # Reallocate within each country to the remaining privately owned industries in
@@ -163,7 +174,7 @@ def est_sim_enumerate_foreign(est,
     # allocate in a more detailed way
 
     # Foreign production
-    no_pub_codes = [91000, 92000, 98000, 99000]
+    no_pub_codes = [910000, 920000, 980000, 990000]
     foreign_prod_sum = foreign_prod_values.groupby(['FAF4', 'TAZ']).agg({'pro_val': sum})
     # Private transactions do not appear to exist in the foreign trade data
     foreign_prod_sum_private = foreign_prod_values[~foreign_prod_values.NAICS6.isin(no_pub_codes)].\
@@ -206,12 +217,12 @@ def est_sim_enumerate_foreign(est,
                                                               df.con_val / df.con_val_private,
                                                               0))
 
-    # Account for countries with no non-public production by reallocating within FAF ZONE
-    # so FAF ZONE production is conserved
+    # Account for countries with no non-public consumption by reallocating within FAF ZONE
+    # so FAF ZONE consumption is conserved
     foreign_cons_faf = foreign_cons_sum.reset_index().groupby(['FAF4']). \
         apply(lambda dfg: dfg.con_val.sum() / dfg.con_val_private.sum()).to_frame('con_scale')
 
-    # Do the scaling for foreign production
+    # Do the scaling for foreign consumption
     foreign_cons_values = foreign_cons_values[~foreign_cons_values.NAICS6.isin(no_pub_codes)].copy()
     foreign_cons_values['con_val_new'] = (foreign_cons_values.con_val.values *
                                           foreign_cons_sum.reset_index('FAF4', drop=True).
@@ -229,6 +240,15 @@ def est_sim_enumerate_foreign(est,
     foreign_consumers = foreign_cons_values[~foreign_cons_values.FAF4.isnull()][
         ['NAICS6', 'NAICSio', 'con_val_new', 'TAZ', 'FAF4']
     ].rename(columns={'con_val_new': 'prod_val'}).assign(prod_val=lambda df: df.prod_val / 1e6)
+
+    # # - Derive 2, 3, and 4 digit NAICS codes
+    # foreign_producers['n4'] = (foreign_producers.NAICS6 / 100).astype(int)
+    # foreign_producers['n3'] = (est.n4 / 10).astype(int)
+    # foreign_producers['n2'] = (est.n3 / 10).astype(int)
+
+    # foreign_consumers['n4'] = (foreign_consumers.NAICS6 / 100).astype(int)
+    # foreign_consumers['n3'] = (est.n4 / 10).astype(int)
+    # foreign_consumers['n2'] = (est.n3 / 10).astype(int)
 
     # Merge in the I/O NAICS codes and SCTG codes
     # Merge in the single-SCTG naics
@@ -261,7 +281,7 @@ def est_sim_enumerate_foreign(est,
     for naics, naics_ests in multi_sctg_consumers.groupby('NAICSio'):
         # slice the NAICS2007io_to_SCTG rows for this naics
         naics_sctgs = multi_NAICS2007io_to_SCTG[multi_NAICS2007io_to_SCTG.NAICSio == naics]
-
+        
         # choose a random SCTG code for each business with this naics code
         sctgs = prng.choice(naics_sctgs.SCTG.values,
                             size=len(naics_ests),
@@ -392,7 +412,7 @@ def est_sim_taz_allocation(est, naics_empcat):
     return est
 
 
-def scale_cbp_to_se(employment, est):
+def scale_cbp_to_se(employment, est, use_bucketround=False):
     employment['adjustment'] = employment.emp_SE / employment.emp_CBP
     employment.adjustment.replace(np.inf, np.nan, inplace=True)
 
@@ -408,7 +428,10 @@ def scale_cbp_to_se(employment, est):
     # FIXME any reason not to replace bucket round with target round
     est.adjustment = est.adjustment.fillna(1.0)  # adjustment factor of 1.0 has no effect
     est.emp = est.emp * est.adjustment
-    est.emp = round_preserve_threshold(est.emp.values)
+    if use_bucketround:
+        est.emp = bucket_round(est.emp.values)
+    else:
+        est.emp = round_preserve_threshold(est.emp.values)
 
     del est['adjustment']
     del employment['adjustment']
@@ -443,12 +466,11 @@ def est_emp_generator(
 
 def est_sim_scale_employees(
         est,
-        firms,
         employment_categories,
-        firm_employment_categories,
         naics_empcat,
-        socio_economics_taz,
-        numa_dist):
+        socio_economics_taz,        
+        taz_fips,
+        taz_faf4):
     """
      Scale ests to Employment Forecasts
     """
@@ -545,242 +567,307 @@ def est_sim_scale_employees(
     # employment (over SE requirement) and distance.
     # Recalculate TAZ level statistics based on relocated establishments and continue.
 
-    # Identify TAZ and model_emp_cat that needs to be reallocated somewhere else
-    employment['to_assign'] = employment['emp_CBP'] < 1
-    employment['to_distribute'] = (~(employment['to_assign']) & ((employment['n_est']) > 1))
-    employment['to_move'] = (employment['emp_SE'] / employment['avg_emp']).apply(np.ceil)
-    employment.loc[employment['emp_CBP'] > 0, 'to_move'] = 0.0
+    # # Identify TAZ and model_emp_cat that needs to be reallocated somewhere else
+    # employment['to_assign'] = employment['emp_CBP'] < 1
+    # employment['to_distribute'] = (~(employment['to_assign']) & ((employment['n_est']) > 1))
+    # employment['to_move'] = (employment['emp_SE'] / employment['avg_emp']).apply(np.ceil)
+    # employment.loc[employment['emp_CBP'] > 0, 'to_move'] = 0.0
 
     # Employment Category Absent from CBP
     emp_cats_not_in_ests = ['gov']
 
-    rem_assign = employment[~employment.model_emp_cat.isin(emp_cats_not_in_ests)].to_assign.sum()
-    numa_dist = numa_dist[numa_dist.oTAZ != numa_dist.dTAZ]
-    est['orig_TAZ'] = est['TAZ']
+    # rem_assign = employment[~employment.model_emp_cat.isin(emp_cats_not_in_ests)].to_assign.sum()
+    # numa_dist = numa_dist[numa_dist.oTAZ != numa_dist.dTAZ]
+    # est['orig_TAZ'] = est['TAZ']
 
-    t0 = print_elapsed_time()
+    # t0 = print_elapsed_time()
 
-    prng = pipeline.get_rn_generator().get_global_rng()
-    while rem_assign > 0:
-        for model_emp_cat in employment.model_emp_cat[employment.to_assign].unique():
-            if model_emp_cat in emp_cats_not_in_ests:
-                continue
-            # print 'Adjusting employment category: %s\n' % model_emp_cat
-            # Get a subset of data to work with
-            est_sub = est[est.model_emp_cat == model_emp_cat].copy()
-            emp_taz = employment[employment.model_emp_cat == model_emp_cat]
-            est_sub['to_move'] = reindex(emp_taz.set_index('TAZ')['to_move'], est_sub.TAZ)
-            emp_assign = emp_taz[emp_taz.to_assign]
-            emp_distribute = emp_taz[emp_taz.to_distribute]
-            if (emp_assign.shape[0] > 0) & (emp_distribute.shape[0] > 0):
-                # Get possible TAZ candidates for relocation
-                emp_assign = pd.merge(numa_dist[numa_dist.dTAZ.isin(emp_distribute.TAZ)],
-                                      emp_assign[['TAZ', 'to_move', 'avg_emp']],
-                                      how='inner',
-                                      left_on='oTAZ',
-                                      right_on='TAZ')
-                emp_assign['emp_avail'] = reindex(
-                    emp_distribute.set_index('TAZ').apply(lambda df: df.emp_SE - df.emp_CBP,
-                                                          axis=1),
-                    emp_assign.dTAZ).fillna(0).clip_lower(0)
-                dist_multiplier = 1000.0
-                emp_multiplier = 0.01
-                emp_assign['prob'] = (dist_multiplier * emp_assign['distance'].rdiv(1)) + \
-                                     (emp_multiplier * (emp_assign['emp_avail'] /
-                                                        emp_assign['avg_emp']))
-                emp_assign.loc[emp_assign.emp_avail < 1, 'prob'] = 0
-                dist_threshold = 25
-                check_size = 0L
-                while check_size == 0:
-                    check_size = emp_assign[(emp_assign.distance <= dist_threshold) &
-                                            (emp_assign.prob > 0)].shape[0]
-                    if check_size == 0:
-                        dist_threshold = dist_threshold + 25
-                # print 'Distance threshold used: %d' % dist_threshold
-                emp_assign.loc[emp_assign.distance > dist_threshold, 'prob'] = 0
-                emp_assign = emp_assign[emp_assign.prob > 0].copy()
-                emp_assign = emp_assign.sort_values('prob', ascending=False)
-                emp_assign['prob'] = emp_assign.groupby('oTAZ')['prob']. \
-                    transform(lambda value: value / value.sum())
-                taz_select = emp_assign.groupby(['oTAZ', 'to_move']). \
-                    apply(lambda grp: prng.choice(grp.dTAZ, grp.to_move.unique().astype(int),
-                                                  replace=True,
-                                                  p=grp.prob))
-                taz_select = taz_select.apply(pd.Series).stack().to_frame('dTAZ').astype(int)
-                taz_select = taz_select.reset_index(level=2, drop=True).groupby('dTAZ'). \
-                    apply(lambda df: prng.choice(df.index.values,
-                                                 1L,
-                                                 replace=False,
-                                                 p=(df.index.get_level_values('to_move').values /
-                                                    df.index.get_level_values('to_move').
-                                                    values.sum()))[0]). \
-                    apply(pd.Series). \
-                    rename(columns={0: 'oTAZ', 1: 'to_move'}).reset_index(). \
-                    astype(int)
-                bus_select = pd.merge(taz_select, est_sub.reset_index()[['bus_id', 'TAZ', 'emp']],
-                                      how='inner',
-                                      left_on='dTAZ',
-                                      right_on='TAZ'
-                                      )
-                bus_select = bus_select.groupby('oTAZ').apply(
-                    lambda df: prng.choice(df.bus_id.values, min(df.to_move.unique().astype(int),
-                                                                 df.shape[0] - 1L),
-                                           replace=False, p=df.emp / df.emp.sum()))
-                bus_select = bus_select.apply(pd.Series).stack().to_frame('bus_id').astype(int)
-                bus_select = bus_select.reset_index(level=1, drop=True)
-                est_moved = pd.merge(bus_select, taz_select,
-                                     how='inner', left_index=True, right_on='oTAZ')
-                est.loc[est_moved.bus_id.values, 'TAZ'] = est_moved['oTAZ'].astype(int).values
-        employment = est.groupby(['TAZ', 'model_emp_cat'])['emp'].sum()
-        employment = employment.to_frame(name='emp_CBP').reset_index()
-        # Melt socio_economics_taz employment data by TAZ and employment category
-        employment_SE = socio_economics_taz.reset_index(). \
-            melt(id_vars='TAZ', var_name='model_emp_cat', value_name='emp_SE')
-        # inner join
-        employment = employment.merge(right=employment_SE, how='outer', on=['TAZ', 'model_emp_cat'])
+    # prng = pipeline.get_rn_generator().get_global_rng()
+    # ITER_MAX = 3
+    # ONLY_ONE = False
+    # while rem_assign > 0:
+    #     for model_emp_cat in employment.model_emp_cat[employment.to_assign].unique():
+    #         if model_emp_cat in emp_cats_not_in_ests:
+    #             continue
+    #         print 'Adjusting employment category: %s\n' % model_emp_cat
+    #         # Get a subset of data to work with
+    #         est_sub = est[est.model_emp_cat == model_emp_cat].copy()
+    #         emp_taz = employment[employment.model_emp_cat == model_emp_cat]
+    #         est_sub['to_move'] = reindex(emp_taz.set_index('TAZ')['to_move'], est_sub.TAZ)
+    #         emp_assign = emp_taz[emp_taz.to_assign]
+    #         emp_assign['dist_threshold'] = 25
+    #         emp_assign['SE_adjust_factor'] = 1
+    #         emp_distribute = emp_taz[emp_taz.to_distribute]
+    #         emp_avg_adj_factor = 1.0
+    #         status = cp_model.INFEASIBLE
+    #         current_iter = 1
+    #         if (emp_assign.shape[0] > 0) & (emp_distribute.shape[0] > 0):
+    #             numa_dist_sub = numa_dist[(numa_dist.dTAZ.isin(emp_assign.TAZ))]
+    #             numa_dist_sub['dist_threshold'] = reindex(emp_assign.set_index('TAZ')['dist_threshold'], numa_dist_sub.dTAZ)  
+    #             numa_dist_sub['added'] = False
+    #             add_TAZ_pair = numa_dist_sub[(numa_dist_sub.distance < numa_dist_sub.dist_threshold) & (~numa_dist_sub.added)][['oTAZ', 'dTAZ', 'distance']]         
+    #             est_sub2 = pd.merge(add_TAZ_pair,
+    #                                 est_sub[['TAZ', 'emp']].reset_index(),
+    #                                 how='inner',
+    #                                 left_on='oTAZ',
+    #                                 right_on='TAZ').set_index('bus_id')
+    #             numa_dist_sub.loc[(numa_dist_sub.distance < numa_dist_sub.dist_threshold) & (~numa_dist_sub.added), 'added'] = True
+    #             while status <> cp_model.OPTIMAL:
+    #                 if current_iter > 1:
+    #                     add_TAZ_pair = numa_dist_sub[(numa_dist_sub.distance < numa_dist_sub.dist_threshold) & (~numa_dist_sub.added)][['oTAZ', 'dTAZ', 'distance']]
+    #                     est_sub3 = pd.merge(add_TAZ_pair,
+    #                                         est_sub[['TAZ', 'emp']].reset_index(),
+    #                                         how='inner',
+    #                                         left_on='oTAZ',
+    #                                         right_on='TAZ').set_index('bus_id')
+    #                     numa_dist_sub.loc[(numa_dist_sub.distance < numa_dist_sub.dist_threshold) & (~numa_dist_sub.added), 'added'] = True
+    #                     est_sub2 = est_sub2.drop('relocate', axis=1).append(est_sub3)
+    #                 emp_avail = est_sub2.groupby('dTAZ')['emp'].agg('sum')
+    #                 emp_assign['emp_avail'] = reindex(emp_avail, emp_assign.TAZ)
+    #                 # check_size = (emp_assign.emp_avail.isna()).any() | ((emp_assign.emp_SE * emp_assign.SE_adjust_factor)>= emp_assign.emp_avail).any()
+    #                 check_size = (emp_assign.emp_avail.isna()).any() | ((emp_assign.emp_avail/emp_assign.emp_SE) <= emp_assign.avg_emp).any()
+    #                 while check_size:
+    #                     emp_assign.loc[emp_assign.emp_avail.isna(),'dist_threshold'] += 25
+    #                     # emp_assign.loc[emp_assign.emp_avail <= emp_assign.emp_SE,'dist_threshold'] += 25
+    #                     emp_assign.loc[(emp_assign.emp_avail/emp_assign.emp_SE) <= (emp_assign.avg_emp*emp_avg_adj_factor),'dist_threshold'] += 25
+    #                     # emp_assign.loc[emp_assign.dist_threshold > 500, 'SE_adjust_factor'] /= 1.125
+    #                     numa_dist_sub['dist_threshold'] = reindex(emp_assign.set_index('TAZ')['dist_threshold'], numa_dist_sub.dTAZ)
+    #                     add_TAZ_pair = numa_dist_sub[(numa_dist_sub.distance < numa_dist_sub.dist_threshold) & (~numa_dist_sub.added)][['oTAZ', 'dTAZ', 'distance']]
+    #                     est_sub3 = pd.merge(add_TAZ_pair,
+    #                                     est_sub[['TAZ', 'emp']].reset_index(),
+    #                                     how='inner',
+    #                                     left_on='oTAZ',
+    #                                     right_on='TAZ').set_index('bus_id')
+    #                     numa_dist_sub.loc[(numa_dist_sub.distance < numa_dist_sub.dist_threshold) & (~numa_dist_sub.added), 'added'] = True
+    #                     est_sub2 = est_sub2.drop('relocate', axis=1, errors='ignore').append(est_sub3)
+    #                     emp_avail = est_sub2.groupby('dTAZ')['emp'].agg('sum')
+    #                     emp_assign['emp_avail'] = reindex(emp_avail, emp_assign.TAZ)
+    #                     # check_size = (emp_assign.emp_avail.isna()).any() | ((emp_assign.emp_SE * emp_assign.SE_adjust_factor)>= emp_assign.emp_avail).any()
+    #                     check_size = (emp_assign.emp_avail.isna()).any() | ((emp_assign.emp_avail/emp_assign.emp_SE) <= emp_assign.avg_emp).any()
+    #                 print 'Distance threshold used: %.2f' % emp_assign.dist_threshold.mean()
+    #                 model = cp_model.CpModel()
+    #                 relocate_const = est_sub2['dTAZ'].reset_index().apply(lambda df: model.NewBoolVar('x[%i,%i]' % (df.bus_id, df.dTAZ)), axis=1)
+    #                 relocate_const.index = est_sub2.index
+    #                 est_sub2['relocate'] = relocate_const
+    #                 se_emp_dtaz_const = est_sub2.groupby('dTAZ')[['relocate','emp']].apply(lambda df: sum(list(df.relocate * df.emp))).to_frame('se_emp_dtaz_const')
+    #                 # se_emp_dtaz_const = est_sub2.groupby('dTAZ')[['relocate','emp']].apply(lambda df: sum(list(df.relocate))).to_frame('se_emp_dtaz_const')
+    #                 # se_emp_dtaz_const['emp_constraint'] = [model.Add(se_emp_dtaz_const.loc[TAZ,'se_emp_dtaz_const'] >= emp_assign.loc[emp_assign.TAZ==TAZ,'to_move'].values[0].astype('int')) for TAZ in se_emp_dtaz_const.index]
+    #                 if (current_iter <= ITER_MAX) & (not ONLY_ONE):
+    #                     se_emp_dtaz_const['emp_constraint'] = [model.Add(se_emp_dtaz_const.loc[TAZ,'se_emp_dtaz_const'] >= np.ceil(emp_assign.loc[emp_assign.TAZ==TAZ,'emp_SE'].values[0] * emp_assign.loc[emp_assign.TAZ==TAZ,'SE_adjust_factor'].values[0]).astype('int')) for TAZ in se_emp_dtaz_const.index]
+    #                 else:
+    #                     se_emp_dtaz_const['emp_constraint'] = [model.Add(se_emp_dtaz_const.loc[TAZ,'se_emp_dtaz_const'] >= 1) for TAZ in se_emp_dtaz_const.index]
+    #                 se_emp_otaz_const = est_sub2.groupby('oTAZ')[['relocate','emp']].apply(lambda df: sum(list(df.relocate))).to_frame('se_emp_otaz_const')
+    #                 se_emp_otaz_const['emp_constraint'] = [model.Add(se_emp_otaz_const.loc[TAZ,'se_emp_otaz_const'] <= emp_taz.loc[emp_taz.TAZ==TAZ,'n_est'].values[0].astype('int')-1) for TAZ in se_emp_otaz_const.index]
+    #                 bus_const = est_sub2.reset_index().groupby('bus_id')[['relocate']].apply(lambda df: model.Add(sum(list(df.relocate.values)) <= 1)).to_frame('variables')
+    #                 obj = sum([x*c for x, c in zip(est_sub2.distance.astype('int').values,est_sub2.relocate.values)])
+    #                 model.Minimize(obj)
+    #                 solver = cp_model.CpSolver()
+    #                 solver.parameters.log_search_progress = True
+    #                 solver.parameters.num_search_workers = 24
+    #                 solution_printer = cp_model.ObjectiveSolutionPrinter()
+    #                 status = solver.SolveWithSolutionCallback(model, solution_printer)                    
+    #                 # emp_assign['dist_threshold'] +=25 
+    #                 # numa_dist_sub['dist_threshold'] +=25
+    #                 emp_avg_adj_factor *= 2.0
+    #                 emp_assign.loc[(emp_assign.emp_avail/emp_assign.emp_SE) <= (emp_assign.avg_emp*emp_avg_adj_factor),'dist_threshold'] += 25
+    #                 numa_dist_sub['dist_threshold'] = reindex(emp_assign.set_index('TAZ')['dist_threshold'], numa_dist_sub.dTAZ)
+    #                 current_iter += 1
+    #                 # emp_assign.loc[emp_assign.dist_threshold > 500, 'SE_adjust_factor'] /= 1.125
+    #             est_sub2['relocated'] = est_sub2.apply(lambda df: solver.Value(df.relocate), axis=1)
+    #             est_moved = est_sub2[est_sub2.relocated==1]
+    #             est.loc[est_moved.index, 'TAZ'] = est_moved['dTAZ'].astype(int).values                
+    #     employment = est.groupby(['TAZ', 'model_emp_cat'])['emp'].sum()
+    #     employment = employment.to_frame(name='emp_CBP').reset_index()
+    #     # Melt socio_economics_taz employment data by TAZ and employment category
+    #     employment_SE = socio_economics_taz.reset_index(). \
+    #         melt(id_vars='TAZ', var_name='model_emp_cat', value_name='emp_SE')
+    #     # inner join
+    #     employment = employment.merge(right=employment_SE, how='outer', on=['TAZ', 'model_emp_cat'])
 
-        # FIXME should we leave this nan to distinguish zero counts from missing data?
-        employment.emp_SE.fillna(0, inplace=True)
-        employment.emp_CBP.fillna(0, inplace=True)
+    #     # FIXME should we leave this nan to distinguish zero counts from missing data?
+    #     employment.emp_SE.fillna(0, inplace=True)
+    #     employment.emp_CBP.fillna(0, inplace=True)
 
-        # Re-allocation of TAZ to establishments for better scaling
-        employment = pd.merge(employment,
-                              est.groupby(['TAZ', 'model_emp_cat']).size().
-                              to_frame('n_est').reset_index(),
-                              on=['TAZ', 'model_emp_cat'],
-                              how='outer').fillna(0)
+    #     # Re-allocation of TAZ to establishments for better scaling
+    #     employment = pd.merge(employment,
+    #                           est.groupby(['TAZ', 'model_emp_cat']).size().
+    #                           to_frame('n_est').reset_index(),
+    #                           on=['TAZ', 'model_emp_cat'],
+    #                           how='outer').fillna(0)
 
-        # Identify TAZ and model_emp_cat that needs to be reallocated somewhere else
-        employment = employment[~((employment.emp_SE == 0) & (employment.emp_CBP == 0))].copy()
-        employment['to_assign'] = employment['emp_CBP'] < 1
-        employment['to_distribute'] = (~(employment['to_assign']) & ((employment['n_est']) > 1))
-        employment['avg_emp'] = reindex(est.groupby('model_emp_cat')['emp'].median(),
-                                        employment.model_emp_cat)
-        employment['to_move'] = (employment['emp_SE'] / employment['avg_emp']).apply(np.ceil)
-        employment.loc[employment['emp_CBP'] > 0, 'to_move'] = 0.0
+    #     # Identify TAZ and model_emp_cat that needs to be reallocated somewhere else
+    #     employment = employment[~((employment.emp_SE == 0) & (employment.emp_CBP == 0))].copy()
+    #     employment['to_assign'] = employment['emp_CBP'] < 1
+    #     employment['to_distribute'] = (~(employment['to_assign']) & ((employment['n_est']) > 1))
+    #     employment['avg_emp'] = reindex(est.groupby('model_emp_cat')['emp'].median(),
+    #                                     employment.model_emp_cat)
+    #     employment['to_move'] = (employment['emp_SE'] / employment['avg_emp']).apply(np.ceil)
+    #     employment.loc[employment['emp_CBP'] > 0, 'to_move'] = 0.0
 
-        # drop rows where both employment sources say there should be no employment in empcat
-        rem_assign = employment[~employment.model_emp_cat.isin(emp_cats_not_in_ests)]. \
-            to_assign.sum()
-        # print 'Establishments remaining to be moved :%d\n' % rem_distribute
+    #     # drop rows where both employment sources say there should be no employment in empcat
+    #     rem_assign = employment[~employment.model_emp_cat.isin(emp_cats_not_in_ests)]. \
+    #         to_assign.sum()
+    #     print 'Establishments remaining to be moved :%d\n' % rem_assign
 
-    logger.info("%d ests relocated." % (est[est.orig_TAZ != est.TAZ].shape[0]))
+    # logger.info("%d ests relocated." % (est[est.orig_TAZ != est.TAZ].shape[0]))
 
-    t0 = print_elapsed_time("est_sim_scale_employees relocating to zero CBP \nzero+ SE NUMA",
-                            t0,
-                            debug=True)
+    # t0 = print_elapsed_time("est_sim_scale_employees relocating to zero CBP \nzero+ SE NUMA",
+    #                         t0,
+    #                         debug=True)
 
-    # FIXME Steps
-    # Identify TAZ that has the capacity to distribute
-    # Identify TAZ to be assigned
-    # Identify how many to move from the TAZ
-    # Loop over model employment category until TAZ identified in step 1 has establishments
-    # less than or equal to employment.
-    # Select establishments randomly based on probability determined by expected number
-    # of employee required to match SE data and distance.
-    # Recalculate TAZ level statistics based on relocated establishments and continue.
+    # # FIXME Steps
+    # # Identify TAZ that has the capacity to distribute
+    # # Identify TAZ to be assigned
+    # # Identify how many to move from the TAZ
+    # # Loop over model employment category until TAZ identified in step 1 has establishments
+    # # less than or equal to employment.
+    # # Select establishments randomly based on probability determined by expected number
+    # # of employee required to match SE data and distance.
+    # # Recalculate TAZ level statistics based on relocated establishments and continue.
 
-    # Identify TAZ and model_emp_cat that needs to be reallocated somewhere else
-    emp_to_check = 'emp_SE'
-    employment['to_distribute'] = employment['n_est'] > employment[emp_to_check]
-    employment['to_assign'] = ~employment['to_distribute']
-    employment['avg_emp'] = reindex(est.groupby('model_emp_cat')['emp'].median(),
-                                    employment.model_emp_cat)
-    employment['to_move'] = employment['n_est'] - employment[emp_to_check]
-    employment.loc[employment.to_move < 0.0, 'to_move'] = 0.0
+    # # Identify TAZ and model_emp_cat that needs to be reallocated somewhere else
+    # emp_to_check = 'emp_SE'
+    # employment['to_distribute'] = employment['n_est'] > employment[emp_to_check]
+    # employment['to_assign'] = ~employment['to_distribute']
+    # employment['avg_emp'] = reindex(est.groupby('model_emp_cat')['emp'].median(),
+    #                                 employment.model_emp_cat)
+    # employment['to_move'] = employment['n_est'] - employment[emp_to_check]
+    # employment.loc[employment.to_move < 0.0, 'to_move'] = 0.0
 
-    rem_distribute = employment.to_distribute.sum()
-    while rem_distribute > 0:
-        for model_emp_cat in employment[employment.to_distribute].model_emp_cat.unique():
-            # print 'Adjusting employment category: %s\n' % model_emp_cat
-            est_sub = est[est.model_emp_cat == model_emp_cat].copy()
-            emp_taz = employment[employment.model_emp_cat == model_emp_cat]
-            est_sub['to_move'] = reindex(emp_taz.set_index('TAZ')['to_move'], est_sub.TAZ)
-            emp_assign = emp_taz[emp_taz.to_assign]
-            emp_distribute = emp_taz[emp_taz.to_distribute]
-            if emp_distribute.shape[0] > 0:
-                emp_distribute = pd.merge(numa_dist, emp_distribute[['TAZ', 'to_move', 'avg_emp']],
-                                          how='inner',
-                                          left_on='oTAZ',
-                                          right_on='TAZ')
-                emp_distribute['emp_reqd'] = reindex(
-                    emp_assign.set_index('TAZ').apply(lambda df: df.emp_SE - df.emp_CBP,
-                                                      axis=1),
-                    emp_distribute.dTAZ).fillna(0)
-                emp_distribute.loc[emp_distribute.emp_reqd < 0, 'emp_reqd'] = 0
-                dist_multiplier = 1000.0
-                emp_multiplier = 0.01
-                emp_distribute['prob'] = (dist_multiplier * emp_distribute['distance'].rdiv(1)) + \
-                                         (emp_multiplier * (emp_distribute['emp_reqd'] /
-                                                            emp_distribute['avg_emp']))
-                emp_distribute.loc[emp_distribute.emp_reqd == 0, 'prob'] = 0
-                dist_threshold = 25
-                check_size = 0L
-                while check_size == 0:
-                    check_size = emp_distribute[(emp_distribute.distance <= dist_threshold) &
-                                                (emp_distribute.prob > 0)].shape[0]
-                    if check_size == 0:
-                        dist_threshold = dist_threshold + 25
-                # print 'Distance threshold used: %d' % dist_threshold
-                emp_distribute.loc[emp_distribute.distance > dist_threshold, 'prob'] = 0
-                emp_distribute = emp_distribute[emp_distribute.prob > 0].copy()
-                emp_distribute = emp_distribute.sort_values('prob', ascending=False)
-                emp_distribute['prob'] = emp_distribute.groupby('oTAZ')['prob']. \
-                    transform(lambda value: value / value.sum())
-                taz_select = emp_distribute.groupby('oTAZ').apply(lambda grp:
-                                                                  prng.choice(grp.dTAZ,
-                                                                              grp.to_move.unique().
-                                                                              astype(int),
-                                                                              replace=True,
-                                                                              p=grp.prob))
-                taz_select = taz_select.apply(pd.Series).stack().to_frame('dTAZ').astype(int)
-                bus_select = est_sub[est_sub.TAZ.isin(taz_select.index.get_level_values('oTAZ').
-                                                      unique().tolist())]. \
-                    groupby('TAZ'). \
-                    apply(lambda grp: prng.choice(grp.index, grp.to_move.unique().astype(int),
-                                                  replace=False,
-                                                  p=(grp.emp / grp.emp.sum())))
-                bus_select = bus_select.apply(pd.Series).stack().to_frame('bus_id'). \
-                    astype(int)
-                taz_select.index.names = ['TAZ', None]
-                est_moved = pd.merge(bus_select, taz_select, how='inner', left_index=True,
-                                     right_index=True)
-                est.loc[est_moved.bus_id.values, 'TAZ'] = est_moved['dTAZ'].astype(int).values
-        employment = est.groupby(['TAZ', 'model_emp_cat'])['emp'].sum()
-        employment = employment.to_frame(name='emp_CBP').reset_index()
-        employment_SE = socio_economics_taz.reset_index(). \
-            melt(id_vars='TAZ', var_name='model_emp_cat', value_name='emp_SE')
-        # inner join
-        employment = employment.merge(right=employment_SE, how='outer', on=['TAZ', 'model_emp_cat'])
+    # rem_distribute = employment.to_distribute.sum()
+    # while rem_distribute > 0:
+    #     for model_emp_cat in employment[employment.to_distribute].model_emp_cat.unique():
+    #         print 'Adjusting employment category: %s\n' % model_emp_cat
+    #         est_sub = est[est.model_emp_cat == model_emp_cat].copy()
+    #         emp_taz = employment[employment.model_emp_cat == model_emp_cat]
+    #         emp_assign = emp_taz[emp_taz.to_assign]
+    #         emp_assign['emp_reqd'] = (emp_assign.emp_SE - emp_assign.emp_CBP)
+    #         emp_distribute = emp_taz[emp_taz.to_distribute]
+    #         emp_distribute['dist_threshold'] = 25
+    #         # emp_distribute['SE_adjust_factor'] = 1
+    #         # emp_avg_adj_factor = 1.0
+    #         status = cp_model.INFEASIBLE
+    #         current_iter = 1
+    #         if emp_distribute.shape[0] > 0:
+    #             emp_reqd = (emp_assign[emp_assign.emp_reqd > 0].emp_reqd.sum())
+    #             emp_distr = (emp_distribute.emp_CBP-emp_distribute.emp_SE).sum()
+    #             include_high_ind = emp_reqd < emp_distr
+    #             numa_dist_sub = numa_dist[(numa_dist.dTAZ.isin(emp_assign.TAZ))]
+    #             numa_dist_sub['dist_threshold'] = reindex(emp_distribute.set_index('TAZ')['dist_threshold'], numa_dist_sub.oTAZ)  
+    #             numa_dist_sub['added'] = False
+    #             add_TAZ_pair = numa_dist_sub[(numa_dist_sub.distance < numa_dist_sub.dist_threshold) & (~numa_dist_sub.added)][['oTAZ', 'dTAZ', 'distance']]         
+    #             est_sub2 = pd.merge(add_TAZ_pair,
+    #                                 est_sub[['TAZ', 'emp']].reset_index(),
+    #                                 how='inner',
+    #                                 left_on='oTAZ',
+    #                                 right_on='TAZ').set_index('bus_id')
+    #             numa_dist_sub.loc[(numa_dist_sub.distance < numa_dist_sub.dist_threshold) & (~numa_dist_sub.added), 'added'] = True
+    #             while status <> cp_model.OPTIMAL:
+    #                 if current_iter > 1:
+    #                     if (emp_assign.emp_reqd > 0).any() & (not include_high_ind):
+    #                         add_TAZ_pair = numa_dist_sub[(numa_dist_sub.distance < numa_dist_sub.dist_threshold) & (~numa_dist_sub.added) & (numa_dist_sub.dTAZ.isin(emp_assign[emp_assign.emp_reqd > 0].TAZ))][['oTAZ', 'dTAZ', 'distance']]
+    #                     else:
+    #                         add_TAZ_pair = numa_dist_sub[(numa_dist_sub.distance < numa_dist_sub.dist_threshold) & (~numa_dist_sub.added)][['oTAZ', 'dTAZ', 'distance']]
+    #                     est_sub3 = pd.merge(add_TAZ_pair,
+    #                                         est_sub[['TAZ', 'emp']].reset_index(),
+    #                                         how='inner',
+    #                                         left_on='oTAZ',
+    #                                         right_on='TAZ').set_index('bus_id')
+    #                     numa_dist_sub.loc[(numa_dist_sub.distance < numa_dist_sub.dist_threshold) & (~numa_dist_sub.added), 'added'] = True
+    #                     est_sub2 = est_sub2.drop('relocate', axis=1).append(est_sub3)
+    #                 # emp_move = est_sub2.groupby('dTAZ')['emp'].agg('sum')
+    #                 # emp_assign['emp_move'] = reindex(emp_move, emp_assign.TAZ)
+    #                 emp_move = est_sub[est_sub.TAZ.isin(est_sub2.oTAZ.unique())].groupby('TAZ')['emp'].agg('sum')
+    #                 emp_distribute['emp_move'] = reindex(emp_move, emp_distribute.TAZ)
+    #                 emp_distribute['emp_move'] = emp_distribute.emp_move - emp_distribute.emp_SE
+    #                 # check_size = (emp_distribute.emp_move.isna()).any() | ((emp_assign.emp_SE * emp_assign.SE_adjust_factor)>= emp_assign.emp_avail).any()
+    #                 # check_size = (emp_distribute.emp_move.isna()).any() | ((emp_distribute.emp_CBP - emp_distribute.emp_move) >= emp_distribute.emp_SE).any()
+    #                 check_size = (emp_distribute.emp_move.isna()).any() | (emp_assign[emp_assign.emp_reqd > 0].emp_reqd.sum() < emp_distribute.emp_move.sum()).any()
+    #                 while check_size:
+    #                     emp_distribute.loc[emp_distribute.emp_move.isna(),'dist_threshold'] += 25
+    #                     # emp_assign.loc[emp_assign.emp_avail <= emp_assign.emp_SE,'dist_threshold'] += 25
+    #                     # emp_distribute.loc[(emp_distribute.emp_CBP - emp_distribute.emp_move) >= emp_distribute.emp_SE,'dist_threshold'] += 25
+    #                     # emp_assign.loc[emp_assign.dist_threshold > 500, 'SE_adjust_factor'] /= 1.125
+    #                     if (emp_assign[emp_assign.emp_reqd > 0].emp_reqd.sum() < emp_distribute.emp_move.fillna(0).sum()):
+    #                         emp_distribute.loc[~emp_distribute.emp_move.isna(),'dist_threshold'] += 25
+    #                     numa_dist_sub['dist_threshold'] = reindex(emp_distribute.set_index('TAZ')['dist_threshold'], numa_dist_sub.oTAZ)
+    #                     if (emp_assign.emp_reqd > 0).any() & (not include_high_ind):
+    #                         add_TAZ_pair = numa_dist_sub[(numa_dist_sub.distance < numa_dist_sub.dist_threshold) & (~numa_dist_sub.added) & (numa_dist_sub.dTAZ.isin(emp_assign[emp_assign.emp_reqd > 0].TAZ))][['oTAZ', 'dTAZ', 'distance']]
+    #                     else:
+    #                         add_TAZ_pair = numa_dist_sub[(numa_dist_sub.distance < numa_dist_sub.dist_threshold) & (~numa_dist_sub.added)][['oTAZ', 'dTAZ', 'distance']]
+    #                     est_sub3 = pd.merge(add_TAZ_pair,
+    #                                         est_sub[['TAZ', 'emp']].reset_index(),
+    #                                         how='inner',
+    #                                         left_on='oTAZ',
+    #                                         right_on='TAZ').set_index('bus_id')
+    #                     numa_dist_sub.loc[(numa_dist_sub.distance < numa_dist_sub.dist_threshold) & (~numa_dist_sub.added), 'added'] = True
+    #                     est_sub2 = est_sub2.drop('relocate', axis=1, errors='ignore').append(est_sub3)
+    #                     emp_move = est_sub[est_sub.TAZ.isin(est_sub2.oTAZ)].groupby('TAZ')['emp'].agg('sum')
+    #                     emp_distribute['emp_move'] = reindex(emp_move, emp_distribute.TAZ)
+    #                     emp_distribute['emp_move'] = emp_distribute.emp_move - emp_distribute.emp_SE
+    #                     # check_size = (emp_assign.emp_avail.isna()).any() | ((emp_assign.emp_SE * emp_assign.SE_adjust_factor)>= emp_assign.emp_avail).any()
+    #                     # check_size = (emp_distribute.emp_move.isna()).any() | ((emp_distribute.emp_CBP - emp_distribute.emp_move) >= emp_distribute.emp_SE).any()
+    #                     check_size = (emp_distribute.emp_move.isna()).any() | (emp_assign[emp_assign.emp_reqd > 0].emp_reqd.sum() < emp_distribute.emp_move.fillna(0).sum()).any()
+    #                 print 'Distance threshold used: %.2f' % emp_distribute.dist_threshold.mean()
+    #                 model = cp_model.CpModel()
+    #                 relocate_const = est_sub2['dTAZ'].reset_index().apply(lambda df: model.NewBoolVar('x[%i,%i]' % (df.bus_id, df.dTAZ)), axis=1)
+    #                 relocate_const.index = est_sub2.index
+    #                 est_sub2['relocate'] = relocate_const
+    #                 se_emp_otaz_const = est_sub2.groupby('oTAZ')[['relocate','emp']].apply(lambda df: sum(list(df.relocate * df.emp))).to_frame('se_emp_otaz_const')
+    #                 # se_emp_otaz_const = est_sub2.groupby('dTAZ')[['relocate','emp']].apply(lambda df: sum(list(df.relocate))).to_frame('se_emp_dtaz_const')
+    #                 # se_emp_otaz_const['emp_constraint'] = [model.Add(se_emp_dtaz_const.loc[TAZ,'se_emp_dtaz_const'] >= emp_distribute.loc[emp_assign.TAZ==TAZ,'to_move'].values[0].astype('int')) for TAZ in se_emp_dtaz_const.index]
+    #                 se_emp_otaz_const['emp_constraint'] = [model.Add(se_emp_otaz_const.loc[TAZ,'se_emp_otaz_const'] <= emp_distribute.loc[emp_distribute.TAZ==TAZ,'emp_SE'].values[0].astype('int')) for TAZ in se_emp_dtaz_const.index]
+    #                 se_emp_dtaz_const = est_sub2.groupby('dTAZ')[['relocate','emp']].apply(lambda df: sum(list(df.relocate * df.emp))).to_frame('se_emp_dtaz_const')
+    #                 se_emp_dtaz_const['emp_constraint'] = [model.Add(se_emp_dtaz_const.loc[TAZ,'se_emp_dtaz_const'] <= emp_assign.loc[emp_assign.TAZ==TAZ,'emp_reqd'].values[0].astype('int')) for TAZ in se_emp_dtaz_const.index]
+    #                 bus_const = est_sub2.reset_index().groupby('bus_id')[['relocate']].apply(lambda df: model.Add(sum(list(df.relocate.values)) <= 1)).to_frame('variables')
+    #                 obj = sum([x*(-c) for c, x in zip((est_sub2.emp/est_sub2.distance).astype('int').values,est_sub2.relocate.values)])
+    #                 model.Maximize(obj)
+    #                 solver = cp_model.CpSolver()
+    #                 solver.parameters.log_search_progress = True
+    #                 solver.parameters.num_search_workers = 24
+    #                 solution_printer = cp_model.ObjectiveSolutionPrinter()
+    #                 status = solver.SolveWithSolutionCallback(model, solution_printer)                    
+    #                 emp_distribute['dist_threshold'] +=25 
+    #                 numa_dist_sub['dist_threshold'] +=25
+    #                 current_iter += 1
+    #             est_sub2['relocated'] = est_sub2.apply(lambda df: solver.Value(df.relocate), axis=1)
+    #             est_moved = est_sub2[est_sub2.relocated==1]
+    #             est.loc[est_moved.index, 'TAZ'] = est_moved['dTAZ'].astype(int).values
+    #     employment = est.groupby(['TAZ', 'model_emp_cat'])['emp'].sum()
+    #     employment = employment.to_frame(name='emp_CBP').reset_index()
+    #     employment_SE = socio_economics_taz.reset_index(). \
+    #         melt(id_vars='TAZ', var_name='model_emp_cat', value_name='emp_SE')
+    #     # inner join
+    #     employment = employment.merge(right=employment_SE, how='outer', on=['TAZ', 'model_emp_cat'])
 
-        # FIXME should we leave this nan to distinguish zero counts from missing data?
-        employment.emp_SE.fillna(0, inplace=True)
-        employment.emp_CBP.fillna(0, inplace=True)
+    #     # FIXME should we leave this nan to distinguish zero counts from missing data?
+    #     employment.emp_SE.fillna(0, inplace=True)
+    #     employment.emp_CBP.fillna(0, inplace=True)
 
-        # Re-allocation of TAZ to establishments for better scaling
-        employment = pd.merge(employment,
-                              est.groupby(['TAZ', 'model_emp_cat']).size().
-                              to_frame('n_est').reset_index(),
-                              on=['TAZ', 'model_emp_cat'],
-                              how='outer').fillna(0)
+    #     # Re-allocation of TAZ to establishments for better scaling
+    #     employment = pd.merge(employment,
+    #                           est.groupby(['TAZ', 'model_emp_cat']).size().
+    #                           to_frame('n_est').reset_index(),
+    #                           on=['TAZ', 'model_emp_cat'],
+    #                           how='outer').fillna(0)
 
-        # Identify TAZ and model_emp_cat that needs to be reallocated somewhere else
-        employment['to_distribute'] = employment['n_est'] > employment[emp_to_check]
-        employment['to_assign'] = ~employment['to_distribute']
-        employment['avg_emp'] = reindex(est.groupby('model_emp_cat')['emp'].median(),
-                                        employment.model_emp_cat)
-        employment['to_move'] = employment['n_est'] - employment[emp_to_check]
-        employment.loc[employment.to_move < 0.0, 'to_move'] = 0.0
+    #     # Identify TAZ and model_emp_cat that needs to be reallocated somewhere else
+    #     employment['to_distribute'] = employment['n_est'] > employment[emp_to_check]
+    #     employment['to_assign'] = ~employment['to_distribute']
+    #     employment['avg_emp'] = reindex(est.groupby('model_emp_cat')['emp'].median(),
+    #                                     employment.model_emp_cat)
+    #     employment['to_move'] = employment['n_est'] - employment[emp_to_check]
+    #     employment.loc[employment.to_move < 0.0, 'to_move'] = 0.0
 
-        # drop rows where both employment sources say there should be no employment in empcat
-        employment = employment[~((employment.emp_SE == 0) & (employment.emp_CBP == 0))]
-        rem_distribute = employment.to_distribute.sum()
-        # print 'Establishments remaining to be moved :%d\n' % rem_distribute
+    #     # drop rows where both employment sources say there should be no employment in empcat
+    #     employment = employment[~((employment.emp_SE == 0) & (employment.emp_CBP == 0))]
+    #     rem_distribute = employment.to_distribute.sum()
+    #     print 'Establishments remaining to be moved :%d\n' % rem_distribute
 
-    logger.info("%d ests relocated." % (est[est.orig_TAZ != est.TAZ].shape[0]))
-    t0 = print_elapsed_time("est_sim_scale_employees relocating establishments for better scaling",
-                            t0,
-                            debug=True)
+    # logger.info("%d ests relocated." % (est[est.orig_TAZ != est.TAZ].shape[0]))
+    # t0 = print_elapsed_time("est_sim_scale_employees relocating establishments for better scaling",
+    #                         t0,
+    #                         debug=True)
 
     # ests.to_csv('ests_moved2.csv')
     # Three cases to deal with:
@@ -801,6 +888,112 @@ def est_sim_scale_employees(
         est = est[est.emp > 0]
         n1 = est.shape[0]
         logger.info('Dropped %s out of %s no-emp ests' % (n0 - n1, n0))
+
+    # - Case 2: create new n new est where n is employees_needed / avg_number_employees_per_firm
+
+    # - Add est to empty TAZ-Employment category combinations to deal with Case 2
+    # For each combination:
+    # 1. Select a number of est max of EMPDIFF/average emp from all est in that Model_EmpCat
+    # 2. Add them to the est table
+    # 3. recalc the EMPADJ to refine the employment to match exactly the SE data employment
+
+    est_needed = employment[employment.emp_CBP < 1].copy()
+
+    # - Calculate average employment by Model_EmpCat
+
+    empcat_avg_emp = est.groupby('model_emp_cat')['emp'].mean()
+    est_needed['avg_emp'] = reindex(empcat_avg_emp, est_needed.model_emp_cat)
+
+    # Employment Category Absent from CBP
+    emp_cats_absent_from_cbp = est_needed.model_emp_cat[est_needed.avg_emp.isnull()].unique()
+
+    DEFAULT_AVG_EMP = 10  # FIXME magic constant
+    est_needed.avg_emp.fillna(DEFAULT_AVG_EMP, inplace=True)
+
+    # - number of est to be sampled is employees_needed / avg_number_employees_per_firm
+    assert (est_needed.emp_CBP == 0).all()
+    est_needed['n'] = (est_needed.emp_SE / est_needed.avg_emp).clip(lower=1).round().astype(
+        int)
+
+    prng = pipeline.get_rn_generator().get_global_rng()
+    new_est = []
+    for emp_cat, emp_cat_est_needed in est_needed.groupby('model_emp_cat'):
+
+        # if emp_cat not in est.model_emp_cat.values:
+        if emp_cat in emp_cats_absent_from_cbp:
+            logger.warn('Skipping model_emp_cat %s not found in cbp' % emp_cat)
+            continue
+
+        new_est_ids = prng.choice(
+            a=est[est.model_emp_cat == emp_cat].index.values,
+            size=emp_cat_est_needed.n.sum(),
+            replace=True)
+
+        df = pd.DataFrame({
+            'old_bus_id': new_est_ids,
+            'new_TAZ': np.repeat(emp_cat_est_needed.TAZ, emp_cat_est_needed.n)
+        })
+
+        new_est.append(df)
+
+    new_est = pd.concat(new_est)
+
+    # Look up the firm attributes for these new est (from the ones they were created from)
+    new_est = new_est.merge(right=est, left_on='old_bus_id', right_index=True)
+
+    del new_est['old_bus_id']
+
+    del new_est['TAZ']
+    new_est.rename(columns={'new_TAZ': 'TAZ'}, inplace=True)
+
+    print new_est.columns.values
+
+    # - Update the County and State FIPS and FAF zones
+    new_est.state_FIPS = reindex(taz_fips.state_FIPS, new_est.TAZ)
+    new_est.county_FIPS = reindex(taz_fips.county_FIPS, new_est.TAZ)
+    new_est.FAF4 = reindex(taz_faf4.FAF4, new_est.TAZ)
+
+    # - Give the new est new, unique business IDs
+    new_est.reset_index(drop=True, inplace=True)
+    new_est.index = new_est.index + est.index.max() + 1
+    new_est.index.name = est.index.name
+
+    # - scale/bucket round to ensure that employee counts of the new est matche the SE data
+    # Summarize employment of new est by TAZ and Model_EmpCat
+    employment_new = new_est.groupby(['TAZ', 'model_emp_cat'])['emp'].sum()
+    employment_new = employment_new.to_frame(name='emp_CBP').reset_index()
+    # Melt socio_economics_taz employment data by TAZ and employment category
+    employment_SE = socio_economics_taz.reset_index().\
+        melt(id_vars='TAZ', var_name='model_emp_cat', value_name='emp_SE')
+    # left join since we only care about new est
+    employment_new = \
+        employment_new.merge(right=employment_SE, how='left', on=['TAZ', 'model_emp_cat'])
+
+    assert not employment_new.emp_SE.isnull().any()
+    assert not employment_new.emp_CBP.isnull().any()
+    assert not (employment_new.emp_CBP == 0).any()
+
+    new_est = scale_cbp_to_se(employment_new, new_est)
+
+    for emp_cat in est_needed.model_emp_cat.unique():
+        n_needed = est_needed[est_needed.model_emp_cat == emp_cat].n.sum()
+        n_created = (new_est.model_emp_cat == emp_cat).sum()
+
+        if n_needed != n_created:
+            logger.warn("model_emp_cat %s needed %s, created %s" % (emp_cat, n_needed, n_created))
+
+    # Combine the original est and the new est
+    est = pd.concat([est, new_est])
+
+    assert not (est.emp < 1).any()
+
+    # Recode employee counts into categories
+    est['esizecat'] = \
+        pd.cut(x=est.emp,
+               bins=np.append(employment_categories.low_threshold.values, np.inf),
+               labels=employment_categories.id,
+               include_lowest=True).astype(int)
+    assert not est.esizecat.isnull().any()
 
     assert est.index.is_unique  # index (bus_id) should be unique
 
@@ -845,15 +1038,15 @@ def est_sim_scale_employees(
                include_lowest=True).astype(int)
     assert not est.esizecat.isnull().any()
 
-    firms['emp'] = est['emp']
-    firms.emp.fillna(0, inplace=True)
-    firms = firms.assign(emp=lambda df: df.groupby('firm_id')['emp'].transform('sum'))
-    firms['fsizecat'] = pd.cut(x=firms.emp,
-                               bins=np.append(firm_employment_categories.low_threshold.values,
-                                              np.inf),
-                               labels=firm_employment_categories.id,
-                               include_lowest=True).astype(int)
-    return est, firms
+    # firms['emp'] = est['emp']
+    # firms.emp.fillna(0, inplace=True)
+    # firms = firms.assign(emp=lambda df: df.groupby('firm_id')['emp'].transform('sum'))
+    # firms['fsizecat'] = pd.cut(x=firms.emp,
+    #                            bins=np.append(firm_employment_categories.low_threshold.values,
+    #                                           np.inf),
+    #                            labels=firm_employment_categories.id,
+    #                            include_lowest=True).astype(int)
+    return est #, firms
 
 
 def est_sim_assign_SCTG(
@@ -1681,8 +1874,10 @@ def est_synthesis(
         socio_economics_taz,
         NAICS2007io_to_SCTG,
         input_output_values,
+        taz_fips,
+        taz_faf4,
         unit_cost,
-        numa_dist,
+        # numa_dist,
         est_pref_weights,
         foreign_prod_values,
         foreign_cons_values
@@ -1704,17 +1899,20 @@ def est_synthesis(
     NAICS2007io_to_SCTG = NAICS2007io_to_SCTG.to_frame()
     input_output_values = input_output_values.to_frame()
     unit_cost = unit_cost.to_frame()
-    numa_dist = numa_dist.to_frame()
+    # numa_dist = numa_dist.to_frame()
     est_pref_weights = est_pref_weights.to_frame()
     foreign_prod_values = foreign_prod_values.to_frame()
-    foreign_cons_values = foreign_cons_values.to_frame()
+    foreign_cons_values = foreign_cons_values.to_frame()    
+    taz_fips = taz_fips.to_frame()
+    taz_faf4 = taz_faf4.to_frame()
     # ests_est = ests_est.to_frame()
 
     t0 = print_elapsed_time("load dataframes", t0, debug=True)
 
     # - est_sim_load_ests
     t0 = print_elapsed_time()
-    est_firms = est_sim_load_establishments(NAICS2012_to_NAICS2007)
+    # est_firms = est_sim_load_establishments(NAICS2012_to_NAICS2007)
+    est = est_sim_load_establishments(NAICS2012_to_NAICS2007)
     t0 = print_elapsed_time("est_sim_load_ests", t0, debug=True)
 
     # if REGRESS:
@@ -1722,12 +1920,12 @@ def est_synthesis(
     #     logger.warn("using uncorrected ests.naics codes for regression")
     #     ests.NAICS2012 = ests.pnaics
 
-    logger.info("%s ests" % (est_firms.shape[0],))
+    logger.info("%s ests" % (est.shape[0],))
 
-    # - separate firms and establishments
-    t0 = print_elapsed_time()
-    est, firms = est_firm_extract(est_firms)
-    t0 = print_elapsed_time("est_firm_extract", t0, debug=True)
+    # # - separate firms and establishments
+    # t0 = print_elapsed_time()
+    # est, firms = est_firm_extract(est_firms)
+    # t0 = print_elapsed_time("est_firm_extract", t0, debug=True)
 
     # - est_sim_enumerate
     t0 = print_elapsed_time()
@@ -1742,7 +1940,7 @@ def est_synthesis(
 
     # - est_sim_enumerate_foreign
     t0 = print_elapsed_time()
-    est = est_sim_enumerate_foreign(est, NAICS2007_to_NAICS2007io, NAICS2007io_to_SCTG,
+    est = est_sim_enumerate_foreign(est, NAICS2012_to_NAICS2007io, NAICS2007io_to_SCTG,
                                     employment_categories, naics_industry, industry_10_5,
                                     foreign_prod_values, foreign_cons_values)
     t0 = print_elapsed_time("est_sim_enumerate_foreign", t0, debug=True)
@@ -1764,9 +1962,15 @@ def est_synthesis(
 
     # - est_sim_scale_employees
     t0 = print_elapsed_time()
-    est, firms = est_sim_scale_employees(est, firms, employment_categories,
-                                         firm_employment_categories, naics_empcat,
-                                         socio_economics_taz, numa_dist)
+    # est, firms = est_sim_scale_employees(est, firms, employment_categories,
+    #                                      firm_employment_categories, naics_empcat,
+    #                                      socio_economics_taz, taz_fips, taz_faf4, numa_dist)
+    est = est_sim_scale_employees(est, 
+                                  employment_categories,
+                                  naics_empcat,
+                                  socio_economics_taz, 
+                                  taz_fips, 
+                                  taz_faf4)
     t0 = print_elapsed_time("est_sim_scale_employees", t0, debug=True)
 
     if REGRESS:
@@ -1843,7 +2047,7 @@ def est_synthesis(
     t0 = print_elapsed_time("est_sim_summary", t0, debug=True)
 
     inject.add_table('establishments', est.reset_index())
-    inject.add_table('firms', firms.reset_index())
+    # inject.add_table('firms', firms.reset_index())
     for naics_sctg, df in producers.iteritems():
         table_name = 'producers_' + '_'.join(map(str, naics_sctg)).partition('.')[0]
         inject.add_table(table_name, df)
