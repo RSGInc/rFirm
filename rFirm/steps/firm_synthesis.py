@@ -343,11 +343,11 @@ def est_sim_enumerate_foreign(est,
     foreign_consumers['producer'] = False
 
     ests_foreign = foreign_producers.append(foreign_consumers, ignore_index=True)
-    ests_foreign.rename(columns={'NAICS6': 'NAICS2007', 'NAICSio': 'NAICS6_make'},
+    ests_foreign.rename(columns={'NAICS6': 'NAICS2012', 'NAICSio': 'NAICS6_make'},
                         inplace=True)
     ests_foreign = ests_foreign[~ests_foreign.NAICS6_make.isnull()].copy()
     # - Derive 2, 3, and 4 digit NAICS codes
-    ests_foreign['n4'] = (ests_foreign.NAICS2007 / 100).astype(int)
+    ests_foreign['n4'] = (ests_foreign.NAICS2012 / 100).astype(int)
     ests_foreign['n3'] = (ests_foreign.n4 / 10).astype(int)
     ests_foreign['n2'] = (ests_foreign.n3 / 10).astype(int)
     assert ~ests_foreign.n2.isnull().any()
@@ -377,10 +377,13 @@ def est_sim_enumerate_foreign(est,
         print "\nnon matching industry_10 codes\n", unmatched_industry_10
         ests_foreign.industry10.fillna('', inplace=True)
 
-    group_by_keys = ['NAICS6_make', 'TAZ', 'FAF4', 'SCTG', 'producer', 'industry10',
+    group_by_keys = ['NAICS2012', 'NAICS6_make', 'TAZ', 'FAF4', 'SCTG', 'producer', 'industry10',
                      'industry5', 'esizecat', 'low_emp', 'emp_range']
     ests_foreign = ests_foreign.groupby(group_by_keys,
                                         as_index=False).agg({'prod_val': sum})
+
+    # Add pnaics
+    ests_foreign['pnaics'] = ests_foreign['NAICS2012'].astype(np.float)
 
     # Reindex foreign ests
     max_bus_id = est.index.max()
@@ -466,7 +469,7 @@ def est_sim_scale_employees(
         naics_empcat,
         socio_economics_taz,
         taz_fips,
-        taz_faf4):
+        taz_faf):
     """
      Scale ests to Employment Forecasts
     """
@@ -647,7 +650,7 @@ def est_sim_scale_employees(
     # - Update the County and State FIPS and FAF zones
     new_est.state_FIPS = reindex(taz_fips.state_FIPS, new_est.TAZ)
     new_est.county_FIPS = reindex(taz_fips.county_FIPS, new_est.TAZ)
-    new_est.FAF4 = reindex(taz_faf4.FAF4, new_est.TAZ)
+    new_est.FAF4 = reindex(taz_faf.FAF, new_est.TAZ)
 
     # - Give the new est new, unique business IDs
     new_est.reset_index(drop=True, inplace=True)
@@ -1562,7 +1565,7 @@ def est_synthesis(
         NAICS2007io_to_SCTG,
         input_output_values,
         taz_fips,
-        taz_faf4,
+        taz_faf,
         unit_cost,
         est_pref_weights,
         foreign_prod_values,
@@ -1589,7 +1592,7 @@ def est_synthesis(
     foreign_prod_values = foreign_prod_values.to_frame()
     foreign_cons_values = foreign_cons_values.to_frame()
     taz_fips = taz_fips.to_frame()
-    taz_faf4 = taz_faf4.to_frame()
+    taz_faf = taz_faf.to_frame()
     # ests_est = ests_est.to_frame()
 
     t0 = print_elapsed_time("load dataframes", t0, debug=True)
@@ -1646,7 +1649,7 @@ def est_synthesis(
                                   naics_empcat,
                                   socio_economics_taz,
                                   taz_fips,
-                                  taz_faf4)
+                                  taz_faf)
     t0 = print_elapsed_time("est_sim_scale_employees", t0, debug=True)
 
     if REGRESS:

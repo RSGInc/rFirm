@@ -22,8 +22,10 @@ input_tables:
     column_map:
       CountyFIPS: county_FIPS
       StateFIPS: state_FIPS
-  taz_faf4:
+  taz_faf:
     filename: corresp_taz_faf4.csv
+    column_map:
+      FAF4: FAF
   unitcost:
     filename: data_unitcost.csv
     column_map:
