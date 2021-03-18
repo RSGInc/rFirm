@@ -650,7 +650,7 @@ def est_sim_scale_employees(
     # - Update the County and State FIPS and FAF zones
     new_est.state_FIPS = reindex(taz_fips.state_FIPS, new_est.TAZ)
     new_est.county_FIPS = reindex(taz_fips.county_FIPS, new_est.TAZ)
-    new_est.FAF4 = reindex(taz_faf.FAF, new_est.TAZ)
+    new_est.FAF4 = reindex(taz_faf.set_index('TAZ').FAF, new_est.TAZ)
 
     # - Give the new est new, unique business IDs
     new_est.reset_index(drop=True, inplace=True)
@@ -1023,7 +1023,7 @@ def est_sim_producers(est, io_values, unitcost):
     MAX_BUS_ID = producers.seller_id.max()
 
     # FIXME convert producers to dictionary of data-frame for ease of storage
-    producers = dict(tuple(producers.groupby(['NAICS', 'SCTG'])))
+    producers = dict(producers.groupby(['NAICS', 'SCTG']).__iter__())
 
     return producers, MAX_BUS_ID
 
@@ -1330,8 +1330,8 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     # consumers['input_commodity'] = consumers['NAICS']
 
     # FIXME store consumers as a dictionary of data-frame for ease of storage
-    consumers = dict(tuple(consumers.groupby(['input_commodity', 'SCTG'])))
-    consumers_foreign = dict(tuple(consumers_foreign.groupby(['input_commodity', 'SCTG'])))
+    consumers = dict(consumers.groupby(['input_commodity', 'SCTG']).__iter__())
+    consumers_foreign = dict(consumers_foreign.groupby(['input_commodity', 'SCTG']).__iter__())
     consumers = {naics_sctg: df.append(consumers_foreign.get(naics_sctg), ignore_index=True) for
                  naics_sctg, df in consumers.iteritems()}
 
