@@ -28,7 +28,7 @@ import rFirm.base_variables as base_variables
 logger = logging.getLogger(__name__)
 
 
-def est_sim_load_establishments(NAICS2012_to_NAICS2007):
+def est_sim_load_establishments(NAICS2017_to_NAICS2012):
     """
     For now, just read Establishments.cvs file created by dev/NFM_Establishmentsynthesis.R
     """
@@ -44,10 +44,10 @@ def est_sim_load_establishments(NAICS2012_to_NAICS2007):
     # FIXME for regression
     est = est.sort_index()
 
-    # The ests table has 2012 naics code
-    est['NAICS2012'] = est.naics
+    # The ests table has 2017 naics code
+    est['NAICS2017'] = est.naics
 
-    assert est.NAICS2012.isin(NAICS2012_to_NAICS2007.NAICS2012).all()
+    assert est.NAICS2017.isin(NAICS2017_to_NAICS2012.NAICS2017).all()
 
     # make sure nobody is using this unawares
     est.rename(columns={'naics': 'pnaics'}, inplace=True)
@@ -56,10 +56,45 @@ def est_sim_load_establishments(NAICS2012_to_NAICS2007):
 
     return est
 
+def est_update_naics_code(
+    est,
+    NAICS2017_to_NAICS2012):
+    """
+    For now, just sample NAICS 2012 for one to many NAICS 2017 to NAICS 2012
+    """
+
+    assert (est.NAICS2017.isin(NAICS2017_to_NAICS2012.NAICS2017)).all()
+
+    NAICS2017_to_NAICS2012['Single'] = reindex(
+        NAICS2017_to_NAICS2012.groupby('NAICS2017').size(),
+        NAICS2017_to_NAICS2012.NAICS2017
+        )
+
+    est['NAICS2012'] =  reindex(
+        NAICS2017_to_NAICS2012[NAICS2017_to_NAICS2012.Single==1].set_index('NAICS2017')['NAICS2012'],
+        est.NAICS2017
+    )
+
+    multi_naics_2017 = NAICS2017_to_NAICS2012[NAICS2017_to_NAICS2012.Single>1].NAICS2017.unique()
+    
+    prng = pipeline.get_rn_generator().get_global_rng()
+    for naics, naics_ests in est[est.NAICS2017.isin(multi_naics_2017)].groupby('NAICS2017'):
+        naics2012 = NAICS2017_to_NAICS2012[NAICS2017_to_NAICS2012.NAICS2017==naics].NAICS2012
+         # choose a random NAICS 2012 code for each business with this naics 2017 code
+        naics2012 = prng.choice(naics2012.values,
+                              size=len(naics_ests),
+                              replace=True)
+
+        est.loc[naics_ests.index, 'NAICS2012'] = naics2012
+
+    assert est.NAICS2012.isin(NAICS2017_to_NAICS2012.NAICS2012).all()
+
+    del est['NAICS2017']
+    return est
 
 def est_sim_enumerate(
         est,
-        NAICS2012_to_NAICS2007io,
+        NAICS2012_to_NAICS2012io,
         employment_categories,
         naics_industry,
         industry_10_5):
@@ -73,11 +108,11 @@ def est_sim_enumerate(
     t0 = print_elapsed_time()
 
     # Only use domestic ests
-    est = est[est.FAF4 < 800].copy()
+    est = est[est.FAF < 800].copy()
 
     # Merge in the single-NAICSio naics
     est['NAICS6_make'] = reindex(
-        NAICS2012_to_NAICS2007io[NAICS2012_to_NAICS2007io.proportion == 1].
+        NAICS2012_to_NAICS2012io[NAICS2012_to_NAICS2012io.proportion == 1].
         set_index('NAICS').NAICSio, est.NAICS2012
     )
 
@@ -85,16 +120,16 @@ def est_sim_enumerate(
 
     # random select NAICSio 2007 code for multi 2012 naics code
     # based on proportions (probabilities)
-    multi_NAICS2012_to_NAICS2007io = \
-        NAICS2012_to_NAICS2007io[NAICS2012_to_NAICS2007io.proportion < 1]
-    multi_naics2007io_naics2012_codes = multi_NAICS2012_to_NAICS2007io.NAICS.unique()
+    multi_NAICS2012_to_NAICS2012io = \
+        NAICS2012_to_NAICS2012io[NAICS2012_to_NAICS2012io.proportion < 1]
+    multi_naics2007io_naics2012_codes = multi_NAICS2012_to_NAICS2012io.NAICS.unique()
     multi_naics2007io_ests = est[est.NAICS2012.isin(multi_naics2007io_naics2012_codes)]
 
     prng = pipeline.get_rn_generator().get_global_rng()
     for naics, naics_ests in multi_naics2007io_ests.groupby('NAICS2012'):
-        # slice the NAICS2012_to_NAICS2007io rows for this naics 2012 code
+        # slice the NAICS2012_to_NAICS2012io rows for this naics 2012 code
         naics_naicsio = \
-            multi_NAICS2012_to_NAICS2007io[multi_NAICS2012_to_NAICS2007io.NAICS == naics]
+            multi_NAICS2012_to_NAICS2012io[multi_NAICS2012_to_NAICS2012io.NAICS == naics]
 
         # choose a random NAICS2007io code for each business with this naics 2012 code
         naicsio = prng.choice(naics_naicsio.NAICSio.values,
@@ -107,9 +142,9 @@ def est_sim_enumerate(
     t0 = print_elapsed_time("choose 2007 NAICSio for multi-2012 naics", t0, debug=True)
 
     if est.NAICS6_make.isnull().any():
-        logger.error("%s null NAICS6_make codes in ests" % est.NAICS6_make.isnull().sum())
+        logger.error("{:,} null NAICS6_make codes in ests" % est.NAICS6_make.isnull().sum())
 
-    # - Derive 2, 3, and 4 digit NAICS codes
+    # - Derive 2, 3, and 4 digit NAICS codess
     est['n4'] = (est.NAICS2012 / 100).astype(int)
     est['n3'] = (est.n4 / 10).astype(int)
     est['n2'] = (est.n3 / 10).astype(int)
@@ -125,7 +160,7 @@ def est_sim_enumerate(
 
     if est.industry10.isnull().any():
         unmatched_naics = est[est.industry10.isnull()].n3.unique()
-        logger.error("%s unmatched n3 naics codes in naics_industry" % len(unmatched_naics))
+        logger.error("{:,} unmatched n3 naics codes in naics_industry" % len(unmatched_naics))
         print "\nnon matching n3 naics codes\n", unmatched_naics
         est.industry10.fillna('', inplace=True)
 
@@ -134,7 +169,7 @@ def est_sim_enumerate(
 
     if est.industry5.isnull().any():
         unmatched_industry_10 = est[est.industry5.isnull()].n3.unique()
-        logger.error("%s unmatched industry_10 codes in industry_10_5" % len(unmatched_industry_10))
+        logger.error("{:,} unmatched industry_10 codes in industry_10_5" % len(unmatched_industry_10))
         print "\nnon matching industry_10 codes\n", unmatched_industry_10
         est.industry10.fillna('', inplace=True)
 
@@ -144,16 +179,16 @@ def est_sim_enumerate(
 
 
 def est_sim_enumerate_foreign(est,
-                              NAICS2012_to_NAICS2007io,
-                              NAICS2007io_to_SCTG,
+                              NAICS2012_to_NAICS2012io,
+                              NAICS2012io_to_SCTG,
                               employment_categories,
                               naics_industry,
                               industry_10_5,
                               foreign_prod_values, foreign_cons_values):
     # Merge the IO codes
-    foreign_prod_values = pd.merge(foreign_prod_values, NAICS2012_to_NAICS2007io.set_index('NAICS'),
+    foreign_prod_values = pd.merge(foreign_prod_values, NAICS2012_to_NAICS2012io.set_index('NAICS'),
                                    how='inner', left_on='NAICS6', right_index=True)
-    foreign_cons_values = pd.merge(foreign_cons_values, NAICS2012_to_NAICS2007io.set_index('NAICS'),
+    foreign_cons_values = pd.merge(foreign_cons_values, NAICS2012_to_NAICS2012io.set_index('NAICS'),
                                    how='inner', left_on='NAICS6', right_index=True)
 
     # Update production and consumption values based on proportion observed
@@ -174,10 +209,10 @@ def est_sim_enumerate_foreign(est,
 
     # Foreign production
     no_pub_codes = [910000, 920000, 980000, 990000]
-    foreign_prod_sum = foreign_prod_values.groupby(['FAF4', 'TAZ']).agg({'pro_val': sum})
+    foreign_prod_sum = foreign_prod_values.groupby(['FAF', 'TAZ']).agg({'pro_val': sum})
     # Private transactions do not appear to exist in the foreign trade data
     foreign_prod_sum_private = foreign_prod_values[~foreign_prod_values.NAICS6.isin(no_pub_codes)].\
-        groupby(['FAF4', 'TAZ']).agg({'pro_val': sum})
+        groupby(['FAF', 'TAZ']).agg({'pro_val': sum})
     foreign_prod_sum = pd.merge(foreign_prod_sum, foreign_prod_sum_private,
                                 how='outer', left_index=True, right_index=True,
                                 suffixes=['', '_private'])
@@ -189,24 +224,24 @@ def est_sim_enumerate_foreign(est,
 
     # Account for countries with no non-public production by reallocating within FAF ZONE
     # so FAF ZONE production is conserved
-    foreign_prod_faf = foreign_prod_sum.reset_index().groupby(['FAF4']). \
+    foreign_prod_faf = foreign_prod_sum.reset_index().groupby(['FAF']). \
         apply(lambda dfg: dfg.pro_val.sum() / dfg.pro_val_private.sum()).to_frame('prod_scale')
 
     # Do the scaling for foreign production
     foreign_prod_values = foreign_prod_values[~foreign_prod_values.NAICS6.isin(no_pub_codes)].copy()
     foreign_prod_values['pro_val_new'] = (foreign_prod_values.pro_val.values *
-                                          foreign_prod_sum.reset_index('FAF4', drop=True).
+                                          foreign_prod_sum.reset_index('FAF', drop=True).
                                           loc[foreign_prod_values.TAZ.values,
                                               'prod_scale'].values *
-                                          foreign_prod_faf.loc[foreign_prod_values.FAF4.values,
+                                          foreign_prod_faf.loc[foreign_prod_values.FAF.values,
                                                                'prod_scale'].values)
 
     # Foreign consumption
-    foreign_cons_sum = foreign_cons_values.groupby(['FAF4', 'TAZ']).agg({'con_val': sum})
+    foreign_cons_sum = foreign_cons_values.groupby(['FAF', 'TAZ']).agg({'con_val': sum})
     # Private transactions do not appear to exist in the foreign trade data
     foreign_cons_sum_private = \
         foreign_cons_values[~foreign_cons_values.NAICS6.isin(no_pub_codes)]. \
-        groupby(['FAF4', 'TAZ']).agg({'con_val': sum})
+        groupby(['FAF', 'TAZ']).agg({'con_val': sum})
     foreign_cons_sum = pd.merge(foreign_cons_sum, foreign_cons_sum_private,
                                 how='outer', left_index=True, right_index=True,
                                 suffixes=['', '_private'])
@@ -218,26 +253,26 @@ def est_sim_enumerate_foreign(est,
 
     # Account for countries with no non-public consumption by reallocating within FAF ZONE
     # so FAF ZONE consumption is conserved
-    foreign_cons_faf = foreign_cons_sum.reset_index().groupby(['FAF4']). \
+    foreign_cons_faf = foreign_cons_sum.reset_index().groupby(['FAF']). \
         apply(lambda dfg: dfg.con_val.sum() / dfg.con_val_private.sum()).to_frame('con_scale')
 
     # Do the scaling for foreign consumption
     foreign_cons_values = foreign_cons_values[~foreign_cons_values.NAICS6.isin(no_pub_codes)].copy()
     foreign_cons_values['con_val_new'] = (foreign_cons_values.con_val.values *
-                                          foreign_cons_sum.reset_index('FAF4', drop=True).
+                                          foreign_cons_sum.reset_index('FAF', drop=True).
                                           loc[foreign_cons_values.TAZ.values,
                                               'con_scale'].values *
-                                          foreign_cons_faf.loc[foreign_cons_values.FAF4.values,
+                                          foreign_cons_faf.loc[foreign_cons_values.FAF.values,
                                                                'con_scale'].values)
 
     # Enumerate foreign producers and consumers
     # Create one agent per country per commodity
     # Remove any records where the country and FAF zone are not known
-    foreign_producers = foreign_prod_values[~foreign_prod_values.FAF4.isnull()][
-        ['NAICS6', 'NAICSio', 'pro_val_new', 'TAZ', 'FAF4']
+    foreign_producers = foreign_prod_values[~foreign_prod_values.FAF.isnull()][
+        ['NAICS6', 'NAICSio', 'pro_val_new', 'TAZ', 'FAF']
     ].rename(columns={'pro_val_new': 'prod_val'}).assign(prod_val=lambda df: df.prod_val / 1e6)
-    foreign_consumers = foreign_cons_values[~foreign_cons_values.FAF4.isnull()][
-        ['NAICS6', 'NAICSio', 'con_val_new', 'TAZ', 'FAF4']
+    foreign_consumers = foreign_cons_values[~foreign_cons_values.FAF.isnull()][
+        ['NAICS6', 'NAICSio', 'con_val_new', 'TAZ', 'FAF']
     ].rename(columns={'con_val_new': 'prod_val'}).assign(prod_val=lambda df: df.prod_val / 1e6)
 
     # # - Derive 2, 3, and 4 digit NAICS codes
@@ -252,22 +287,22 @@ def est_sim_enumerate_foreign(est,
     # Merge in the I/O NAICS codes and SCTG codes
     # Merge in the single-SCTG naics
     foreign_producers['SCTG'] = reindex(
-        NAICS2007io_to_SCTG[NAICS2007io_to_SCTG.proportion == 1].set_index('NAICSio').SCTG,
+        NAICS2012io_to_SCTG[NAICS2012io_to_SCTG.proportion == 1].set_index('NAICSio').SCTG,
         foreign_producers.NAICSio
     )
     foreign_consumers['SCTG'] = reindex(
-        NAICS2007io_to_SCTG[NAICS2007io_to_SCTG.proportion == 1].set_index('NAICSio').SCTG,
+        NAICS2012io_to_SCTG[NAICS2012io_to_SCTG.proportion == 1].set_index('NAICSio').SCTG,
         foreign_consumers.NAICSio
     )
-    multi_NAICS2007io_to_SCTG = NAICS2007io_to_SCTG[NAICS2007io_to_SCTG.proportion < 1]
-    multi_sctg_naics_codes = multi_NAICS2007io_to_SCTG.NAICSio.unique()
+    multi_NAICS2012io_to_SCTG = NAICS2012io_to_SCTG[NAICS2012io_to_SCTG.proportion < 1]
+    multi_sctg_naics_codes = multi_NAICS2012io_to_SCTG.NAICSio.unique()
     multi_sctg_producers = foreign_producers[foreign_producers.NAICSio.isin(multi_sctg_naics_codes)]
     multi_sctg_consumers = foreign_consumers[foreign_consumers.NAICSio.isin(multi_sctg_naics_codes)]
 
     prng = pipeline.get_rn_generator().get_global_rng()
     for naics, naics_ests in multi_sctg_producers.groupby('NAICSio'):
-        # slice the NAICS2007io_to_SCTG rows for this naics
-        naics_sctgs = multi_NAICS2007io_to_SCTG[multi_NAICS2007io_to_SCTG.NAICSio == naics]
+        # slice the NAICS2012io_to_SCTG rows for this naics
+        naics_sctgs = multi_NAICS2012io_to_SCTG[multi_NAICS2012io_to_SCTG.NAICSio == naics]
 
         # choose a random SCTG code for each business with this naics code
         sctgs = prng.choice(naics_sctgs.SCTG.values,
@@ -278,8 +313,8 @@ def est_sim_enumerate_foreign(est,
         foreign_producers.loc[naics_ests.index, 'SCTG'] = sctgs
 
     for naics, naics_ests in multi_sctg_consumers.groupby('NAICSio'):
-        # slice the NAICS2007io_to_SCTG rows for this naics
-        naics_sctgs = multi_NAICS2007io_to_SCTG[multi_NAICS2007io_to_SCTG.NAICSio == naics]
+        # slice the NAICS2012io_to_SCTG rows for this naics
+        naics_sctgs = multi_NAICS2012io_to_SCTG[multi_NAICS2012io_to_SCTG.NAICSio == naics]
 
         # choose a random SCTG code for each business with this naics code
         sctgs = prng.choice(naics_sctgs.SCTG.values,
@@ -300,7 +335,7 @@ def est_sim_enumerate_foreign(est,
         # TODO: are these the right correspondences given the I/O data for the current project?
         KeyMap('NAICS6', 211111, 'SCTG', (16L, 19L), (.45, .55)),
         # Crude Petroleum and Natural Gas Extraction: Crude petroleum; Coal and petroleum products, n.e.c.            # nopep8
-        KeyMap('NAICS6', 324110, 'SCTG', (17L, 18L, 19L), (.25, .25, .50)),
+        KeyMap('NAICS6', 324110, 'SCTG', (17L, 18L, 19L), (.50, .25, 0.25)), #(17L, 18L, 19L), (.25, .25, .50)),
         # Petroleum Refineries: Gasoline and aviation turbine fuel; Fuel oils; Coal and petroleum products, n.e.c.    # nopep8
     ]
 
@@ -316,9 +351,9 @@ def est_sim_enumerate_foreign(est,
             for target_value, prob in zip(keymap.target_values, keymap.probs):
                 temp_fp.loc[:, keymap.target] = target_value
                 temp_fp.loc[:, 'prod_val'] = prod_val * prob
-                return_df = pd.concat([return_df, temp_fp], ignore_index=True)
+                return_df = pd.concat([return_df, temp_fp], ignore_index=True, sort=True)
             foreign_producers = pd.concat([foreign_producers.loc[~flag_rows], return_df],
-                                          ignore_index=True)
+                                          ignore_index=True, sort=True)
 
     for keymap in keymaps:
         flag_rows = (foreign_consumers[keymap.key_col] == keymap.key_value)
@@ -332,9 +367,9 @@ def est_sim_enumerate_foreign(est,
             for target_value, prob in zip(keymap.target_values, keymap.probs):
                 temp_fp.loc[:, keymap.target] = target_value
                 temp_fp.loc[:, 'prod_val'] = prod_val * prob
-                return_df = pd.concat([return_df, temp_fp], ignore_index=True)
+                return_df = pd.concat([return_df, temp_fp], ignore_index=True, sort=True)
             foreign_consumers = pd.concat([foreign_consumers.loc[~flag_rows], return_df],
-                                          ignore_index=True)
+                                          ignore_index=True, sort=True)
 
     assert foreign_producers.index.is_unique
     assert foreign_producers.index.is_unique
@@ -364,7 +399,7 @@ def est_sim_enumerate_foreign(est,
 
     if ests_foreign.industry10.isnull().any():
         unmatched_naics = ests_foreign[ests_foreign.industry10.isnull()].n3.unique()
-        logger.error("%s unmatched n3 naics codes in naics_industry" % len(unmatched_naics))
+        logger.error("{:,} unmatched n3 naics codes in naics_industry" % len(unmatched_naics))
         print "\nnon matching n3 naics codes\n", unmatched_naics
         ests_foreign.industry10.fillna('', inplace=True)
 
@@ -373,11 +408,11 @@ def est_sim_enumerate_foreign(est,
 
     if ests_foreign.industry5.isnull().any():
         unmatched_industry_10 = ests_foreign[ests_foreign.industry5.isnull()].n3.unique()
-        logger.error("%s unmatched industry_10 codes in industry_10_5" % len(unmatched_industry_10))
+        logger.error("{:,} unmatched industry_10 codes in industry_10_5" % len(unmatched_industry_10))
         print "\nnon matching industry_10 codes\n", unmatched_industry_10
         ests_foreign.industry10.fillna('', inplace=True)
 
-    group_by_keys = ['NAICS2012', 'NAICS6_make', 'TAZ', 'FAF4', 'SCTG', 'producer', 'industry10',
+    group_by_keys = ['NAICS2012', 'NAICS6_make', 'TAZ', 'FAF', 'SCTG', 'producer', 'industry10',
                      'industry5', 'esizecat', 'low_emp', 'emp_range']
     ests_foreign = ests_foreign.groupby(group_by_keys,
                                         as_index=False).agg({'prod_val': sum})
@@ -387,13 +422,13 @@ def est_sim_enumerate_foreign(est,
 
     # Reindex foreign ests
     max_bus_id = est.index.max()
-    logger.info("assigning foreign est indexes starting above MAX_BUS_ID %s" % (max_bus_id,))
+    logger.info("assigning foreign est indexes starting above MAX_BUS_ID {:,}".format(max_bus_id,))
     ests_foreign.index = ests_foreign.index + max_bus_id + 1L
     ests_foreign.index.name = est.index.name
 
-    est = est.append(ests_foreign)
-    est.loc[est.FAF4 > 800, 'county_FIPS'] = 0
-    est.loc[est.FAF4 > 800, 'state_FIPS'] = 0
+    est = est.append(ests_foreign, sort=True)
+    est.loc[est.FAF > 800, 'county_FIPS'] = 0
+    est.loc[est.FAF > 800, 'state_FIPS'] = 0
 
     assert est.index.is_unique
     return est
@@ -403,7 +438,7 @@ def est_sim_taz_allocation(est, naics_empcat):
     # most of the R code serves no purpose when there is only one level of TAZ
 
     # - Assign the model employment category to each domestic est
-    domestic_index = (est.FAF4 < 800)
+    domestic_index = (est.FAF < 800)
     est.loc[domestic_index, 'model_emp_cat'] = reindex(naics_empcat.model_emp_cat,
                                                        est.loc[domestic_index, 'n2'])
 
@@ -474,9 +509,9 @@ def est_sim_scale_employees(
      Scale ests to Employment Forecasts
     """
 
-    # Separate out the foreign ests
-    est_foreign = est[est.FAF4 > 800]
-    est = est[est.FAF4 < 800].copy()
+    # Separate out the foreign ests and us territories
+    est_us_terr_foreign = est[est.FAF > 599] 
+    est = est[est.FAF < 600].copy()
 
     # Assign employment based on the proportion of ests obtained by
     # interpolating number of ests between low and high value of
@@ -500,10 +535,23 @@ def est_sim_scale_employees(
                           'bus_id': x.index.tolist()})
     est_emp = pd.concat([pd.DataFrame.from_dict(x) for x in est_emp.to_frame('est_emp').
                         reset_index().est_emp.tolist()],
-                        axis=0)
+                        axis=0, sort=True)
     # ests_emp.loc[ests_emp.emp > 5000, 'emp'] = 5000
     est_emp.set_index('bus_id', inplace=True)
     est.loc[est_emp.index, 'emp'] = est_emp.emp.values
+
+    # reformat socio_economics_taz table
+    socio_economics_taz['model_emp_cat'] = reindex(naics_empcat.groupby('lehdn2')['model_emp_cat'].agg(np.unique),
+    socio_economics_taz.n2)
+    socio_economics_taz = socio_economics_taz.pivot_table(
+        index='TAZ',
+        columns='model_emp_cat',
+        values='LEmp',
+        aggfunc=sum
+    ).fillna(0).astype(int)
+    # socio_economics_taz.columns = reindex(naics_empcat.groupby('lehdn2')['model_emp_cat'].agg(np.unique),
+    # socio_economics_taz.columns)
+    socio_economics_taz.columns = socio_economics_taz.columns.rename('')
 
     # employment categories that
     model_emp_cats = naics_empcat.model_emp_cat.unique()
@@ -516,14 +564,14 @@ def est_sim_scale_employees(
 
     # columns that est_sim_scale_employees_taz (allegedly) expects in ests
     region_est_cols = \
-        ['TAZ', 'county_FIPS', 'state_FIPS', 'FAF4', 'NAICS2012', 'n4', 'n3', 'n2',
+        ['TAZ', 'county_FIPS', 'state_FIPS', 'FAF', 'NAICS2012', 'n4', 'n3', 'n2',
          'NAICS6_make', 'industry10', 'ind'
                                       'ustry5', 'model_emp_cat', 'esizecat',
          'emp']
 
     est = est[region_est_cols].copy()
     MAX_BUS_ID = est.index.max()
-    logger.info("assigning new est indexes starting above MAX_BUS_ID %s" % (MAX_BUS_ID,))
+    logger.info("assigning new est indexes starting above MAX_BUS_ID {:,}".format(MAX_BUS_ID,))
 
     # - Compare employment between socio-economic input (SE) and synthesized ests (CBP)
 
@@ -586,7 +634,7 @@ def est_sim_scale_employees(
         n0 = est.shape[0]
         est = est[est.emp > 0]
         n1 = est.shape[0]
-        logger.info('Dropped %s out of %s no-emp ests' % (n0 - n1, n0))
+        logger.info('Dropped {:,} out of {:,} no-emp ests'.format(n0 - n1, n0))
 
     # - Case 2: create new n new est where n is employees_needed / avg_number_employees_per_firm
 
@@ -624,7 +672,7 @@ def est_sim_scale_employees(
             continue
 
         new_est_ids = prng.choice(
-            a=est[est.model_emp_cat == emp_cat].index.values,
+            a=est[(est.model_emp_cat == emp_cat) & (est.FAF < 600)].index.values,
             size=emp_cat_est_needed.n.sum(),
             replace=True)
 
@@ -635,7 +683,7 @@ def est_sim_scale_employees(
 
         new_est.append(df)
 
-    new_est = pd.concat(new_est)
+    new_est = pd.concat(new_est, sort=True)
 
     # Look up the firm attributes for these new est (from the ones they were created from)
     new_est = new_est.merge(right=est, left_on='old_bus_id', right_index=True)
@@ -648,9 +696,42 @@ def est_sim_scale_employees(
     print new_est.columns.values
 
     # - Update the County and State FIPS and FAF zones
-    new_est.state_FIPS = reindex(taz_fips.state_FIPS, new_est.TAZ)
-    new_est.county_FIPS = reindex(taz_fips.county_FIPS, new_est.TAZ)
-    new_est.FAF4 = reindex(taz_faf.set_index('TAZ').FAF, new_est.TAZ)
+
+    taz_fips['Single'] = reindex(
+        taz_fips.groupby('TAZ').size(),
+        taz_fips.TAZ
+        )
+
+    new_est['state_FIPS'] =  reindex(
+        taz_fips[taz_fips.Single==1].set_index('TAZ')['state_FIPS'],
+        new_est.TAZ
+    )
+    new_est['county_FIPS'] =  reindex(
+        taz_fips[taz_fips.Single==1].set_index('TAZ')['county_FIPS'],
+        new_est.TAZ
+    )
+
+    new_est = new_est.reset_index(drop=True)
+
+    multi_cnty_taz = taz_fips[taz_fips.Single>1].TAZ.unique()
+    
+    prng = pipeline.get_rn_generator().get_global_rng()
+    for taz, taz_est in new_est[new_est.TAZ.isin(multi_cnty_taz)].groupby('TAZ'):
+        cnty_fips = taz_fips[taz_fips.TAZ==taz].county_FIPS
+        state_fips = taz_fips[taz_fips.TAZ==taz].state_FIPS
+        fips_codes = [[state_fip, cnty_fip] for state_fip, cnty_fip in zip(state_fips.values, cnty_fips.values)]
+        fips_codes = pd.DataFrame(fips_codes, columns = ['state_FIPS', 'county_FIPS'])
+        # choose a random State|County code for each business with this TAZ
+        fips_index = prng.choice(range(len(fips_codes)),
+                                size=len(taz_est),
+                                replace=True)
+        fips_codes = fips_codes.iloc[fips_index]
+        fips_codes.index = taz_est.index
+        new_est.loc[taz_est.index, ['state_FIPS', 'county_FIPS']] = fips_codes
+
+    # new_est.state_FIPS = reindex(taz_fips.state_FIPS, new_est.TAZ)
+    # new_est.county_FIPS = reindex(taz_fips.county_FIPS, new_est.TAZ)
+    new_est.FAF = reindex(taz_faf.set_index('TAZ').FAF, new_est.TAZ)
 
     # - Give the new est new, unique business IDs
     new_est.reset_index(drop=True, inplace=True)
@@ -679,10 +760,10 @@ def est_sim_scale_employees(
         n_created = (new_est.model_emp_cat == emp_cat).sum()
 
         if n_needed != n_created:
-            logger.warn("model_emp_cat %s needed %s, created %s" % (emp_cat, n_needed, n_created))
+            logger.warn("model_emp_cat {} needed {:,}, created {:,}".format(emp_cat, n_needed, n_created))
 
     # Combine the original est and the new est
-    est = pd.concat([est, new_est])
+    est = pd.concat([est, new_est], sort=True)
 
     assert not (est.emp < 1).any()
 
@@ -713,23 +794,38 @@ def est_sim_scale_employees(
 
     # Reset the indices (bus_id) of foreign ests
     MAX_BUS_ID = est.index.max()
-    logger.info("assigning foreign est indexes starting above MAX_BUS_ID %s" % (MAX_BUS_ID,))
-    est_foreign.reset_index(drop=True, inplace=True)
-    est_foreign.index = est_foreign.index + MAX_BUS_ID + 1
-    est_foreign.index.name = est.index.name
+    logger.info("assigning foreign est indexes starting above MAX_BUS_ID {:,}".format(MAX_BUS_ID,))
+    est_us_terr_foreign.reset_index(drop=True, inplace=True)
+    est_us_terr_foreign.index = est_us_terr_foreign.index + MAX_BUS_ID + 1
+    est_us_terr_foreign.index.name = est.index.name
 
     # Combine the new ests with foreign ests
-    est = pd.concat([est, est_foreign]).sort_index()
+    est = pd.concat([est, est_us_terr_foreign], sort=True).sort_index()
     assert est.index.is_unique  # index (bus_id) should be unique
 
     # Recode employee counts into categories
-    est.loc[est.FAF4 > 800, 'emp'] = \
+    # US Territories
+    est_emp = est[(est.FAF > 599) & (est.FAF < 800)].groupby(['esizecat', 'low_emp', 'emp_range'],
+    group_keys=False) \
+        .apply(lambda x: {'emp': est_emp_generator(x.low_emp.unique(),
+        x.emp_range.unique(),
+        hyman_interpol,
+        x.shape[0]),
+        'bus_id': x.index.tolist()})
+    est_emp = pd.concat([pd.DataFrame.from_dict(x) for x in est_emp.to_frame('est_emp').
+                        reset_index().est_emp.tolist()],
+                        axis=0, sort=True)
+    est_emp.set_index('bus_id', inplace=True)
+    est.loc[est_emp.index, 'emp'] = est_emp.emp.values
+    
+    # Foreign estalblishments
+    est.loc[est.FAF > 800, 'emp'] = \
         est_emp_generator(employment_categories.loc[employment_categories.index.max(),
                                                     'low_threshold'],
                           employment_categories.loc[employment_categories.index.max(),
                                                     'emp_range'],
                           hyman_interpol,
-                          (est.FAF4 > 800).sum()).astype(int)
+                          (est.FAF > 800).sum()).astype(int)
     est['esizecat'] = \
         pd.cut(x=est.emp,
                bins=np.append(employment_categories.low_threshold.values, np.inf),
@@ -741,7 +837,7 @@ def est_sim_scale_employees(
 
 def est_sim_assign_SCTG(
         est,
-        NAICS2007io_to_SCTG):
+        NAICS2012io_to_SCTG):
     """
     Simulate Production Commodities, choose a single commodity for ests making more than one
     """
@@ -753,27 +849,27 @@ def est_sim_assign_SCTG(
     t0 = print_elapsed_time()
 
     # Separate out the foreign ests
-    est_foreign = est[est.FAF4 > 800]
-    est = est[est.FAF4 < 800].copy()
+    est_foreign = est[est.FAF > 800]
+    est = est[est.FAF < 800].copy()
 
     # Merge in the single-SCTG naics
     est['SCTG'] = reindex(
-        NAICS2007io_to_SCTG[NAICS2007io_to_SCTG.proportion == 1].set_index('NAICSio').SCTG,
+        NAICS2012io_to_SCTG[NAICS2012io_to_SCTG.proportion == 1].set_index('NAICSio').SCTG,
         est.NAICS6_make
     )
 
     t0 = print_elapsed_time("Merge in the single-SCTG naics", t0, debug=True)
 
     # random select SCTG for multi-SCTG naics based on proportions (probabilities)
-    multi_NAICS2007io_to_SCTG = NAICS2007io_to_SCTG[NAICS2007io_to_SCTG.proportion < 1]
-    multi_sctg_naics_codes = multi_NAICS2007io_to_SCTG.NAICSio.unique()
+    multi_NAICS2012io_to_SCTG = NAICS2012io_to_SCTG[NAICS2012io_to_SCTG.proportion < 1]
+    multi_sctg_naics_codes = multi_NAICS2012io_to_SCTG.NAICSio.unique()
     multi_sctg_ests = est[est.NAICS6_make.isin(multi_sctg_naics_codes)]
 
     # for each distinct multi-SCTG naics
     prng = pipeline.get_rn_generator().get_global_rng()
     for naics, naics_est in multi_sctg_ests.groupby('NAICS6_make'):
-        # slice the NAICS2007io_to_SCTG rows for this naics
-        naics_sctgs = multi_NAICS2007io_to_SCTG[multi_NAICS2007io_to_SCTG.NAICSio == naics]
+        # slice the NAICS2012io_to_SCTG rows for this naics
+        naics_sctgs = multi_NAICS2012io_to_SCTG[multi_NAICS2012io_to_SCTG.NAICSio == naics]
 
         # choose a random SCTG code for each business with this naics code
         sctgs = prng.choice(naics_sctgs.SCTG.values,
@@ -803,7 +899,8 @@ def est_sim_assign_SCTG(
         # TODO: are these the right correspodences given the I/O data for the current project?
         KeyMap('NAICS2012', 211111, 'SCTG', (16L, 19L), (.45, .55)),
         # Crude Petroleum and Natural Gas Extraction: Crude petroleum; Coal and petroleum products, n.e.c.            # nopep8
-        KeyMap('NAICS2012', 324110, 'SCTG', (17L, 18L, 19L), (.25, .25, .50)),
+        # KeyMap('NAICS2012', 324110, 'SCTG', (17L, 18L, 19L), (.25, .25, .50)),
+        KeyMap('NAICS2012', 324110, 'SCTG', (17L, 18L, 19L), (.50, .25, .25)),
         # Petroleum Refineries: Gasoline and aviation turbine fuel; Fuel oils; Coal and petroleum products, n.e.c.    # nopep8
         # nopep8
         KeyMap('n4', 4233, 'SCTG', (10L, 11L, 12L, 25L, 26L), (0.10, 0.10, 0.60, 0.10, 0.10)),
@@ -854,7 +951,7 @@ def est_sim_assign_SCTG(
     est.NAICS6_make = est.NAICS6_make.mask(est.n2 == 42, (est.n4 * 100).astype(str))
 
     # Combine the new ests with foreign ests
-    est = pd.concat([est, est_foreign]).sort_index()
+    est = pd.concat([est, est_foreign], sort=True).sort_index()
 
     assert est.index.is_unique
     return est
@@ -868,8 +965,8 @@ def est_sim_types(est):
     assert est.index.is_unique
 
     # Separate out the foreign ests
-    est_foreign = est[est.FAF4 > 800]
-    est = est[est.FAF4 < 800].copy()
+    est_foreign = est[est.FAF > 800]
+    est = est[est.FAF < 800].copy()
 
     # Warehouses
     # NAICS 481 air, 482 rail, 483 water, 493 warehouse and storage
@@ -883,7 +980,7 @@ def est_sim_types(est):
     producers = est[~est.SCTG.isnull()].copy()
 
     prng = pipeline.get_rn_generator().get_global_rng()
-    g = ['TAZ', 'FAF4', 'NAICS6_make', 'SCTG']
+    g = ['TAZ', 'FAF', 'NAICS6_make', 'SCTG']
     keeper_ids = \
         producers[g].groupby(g).agg(lambda x: prng.choice(x.index, size=1)[0]).values
     producers['must_keep'] = False
@@ -910,9 +1007,9 @@ def est_sim_types(est):
     est.loc[makers.index, 'maker'] = True
 
     # Combine the new ests with foreign ests
-    est = pd.concat([est, est_foreign]).sort_index()
+    est = pd.concat([est, est_foreign], sort=True).sort_index()
 
-    return est[['state_FIPS', 'county_FIPS', 'FAF4', 'TAZ', 'SCTG', 'NAICS2012',
+    return est[['state_FIPS', 'county_FIPS', 'FAF', 'TAZ', 'SCTG', 'NAICS2012',
                 'NAICS6_make', 'industry10', 'industry5', 'model_emp_cat', 'esizecat', 'emp',
                 'warehouse', 'producer', 'maker', 'prod_val']].copy()
 
@@ -929,7 +1026,7 @@ def est_sim_producers(est, io_values, unitcost):
     TAZ                          int64
     county_FIPS                  int64
     state_FIPS                   int64
-    FAF4                       float64
+    FAF                       float64
     n4                           int64
     n3                           int64
     n2                           int64
@@ -948,10 +1045,10 @@ def est_sim_producers(est, io_values, unitcost):
     # io_values.NAICS6_make = input commodity required to make NAICS6_use
     # io_values.NAICS6_use = output commodity uses io_values.NAICS6_make as an input
     producers = est[est.producer]
-    domestic_producer_idx = producers.FAF4 < 800
+    domestic_producer_idx = producers.FAF < 600
 
     # - get the max_bus_id
-    MAX_BUS_ID = est[est.FAF4 < 800].index.max()
+    MAX_BUS_ID = est[est.FAF < 800].index.max()
 
     # we only want i/o pairs that use domestic producers commodity as an input
     # FIXME how should we handle foreign production
@@ -989,6 +1086,8 @@ def est_sim_producers(est, io_values, unitcost):
 
     t0 = print_elapsed_time("io_values", t0, debug=True)
 
+    io_values.to_csv('io_values_prod.csv')
+
     producers = pd.merge(left=producers.reset_index(), right=io_values[['val_emp']],
                          left_on='NAICS6_make', right_index=True, how='inner')
 
@@ -1002,8 +1101,10 @@ def est_sim_producers(est, io_values, unitcost):
     # compute producer capacity
     producers['unit_cost'] = reindex(unitcost.unit_cost, producers.SCTG)
     producers['prod_cap'] = producers.prod_val * 1E6 / producers.unit_cost
-    producers.loc[producers.FAF4 > 800, 'bus_id'] = np.arange(0, (producers.FAF4 > 800).sum()) + \
+    producers.loc[producers.FAF > 800, 'bus_id'] = np.arange(0, (producers.FAF > 800).sum()) + \
         MAX_BUS_ID + 1
+
+    producers.to_csv('producers_intermediate.csv')
 
     col_map = {'bus_id': 'seller_id',
                'NAICS6_make': 'NAICS',
@@ -1013,7 +1114,7 @@ def est_sim_producers(est, io_values, unitcost):
     producers.rename(columns=col_map, inplace=True)
 
     producer_cols = \
-        ['seller_id', 'TAZ', 'county_FIPS', 'state_FIPS', 'FAF4',
+        ['seller_id', 'TAZ', 'county_FIPS', 'state_FIPS', 'FAF',
          'NAICS', 'size', 'SCTG', 'non_transport_unit_cost', 'output_capacity_tons']
     producers = producers[producer_cols].copy()
 
@@ -1028,7 +1129,7 @@ def est_sim_producers(est, io_values, unitcost):
     return producers, MAX_BUS_ID
 
 
-def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_weights, MAX_BUS_ID):
+def est_sim_consumers(est, io_values, NAICS2012io_to_SCTG, unitcost, est_pref_weights, MAX_BUS_ID):
     """
     Create Consumers
 
@@ -1039,7 +1140,7 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     SCTG                            int64
     NAICS                          object
     TAZ                             int64
-    FAF4                          float64
+    FAF                          float64
     esizecat                          str
     size                            int64
     con_val                       float64
@@ -1057,11 +1158,11 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     # producers.NAICS6_make - the commodity the producer produces
 
     # Separate foreign ests
-    est_foreign = est[est.FAF4 > 800]
-    est = est[est.FAF4 < 800]
+    est_foreign = est[est.FAF > 800]
+    est = est[est.FAF < 800]
 
     # Identify consumer ests
-    cols = ['TAZ', 'county_FIPS', 'state_FIPS', 'FAF4', 'NAICS6_make', 'esizecat', 'emp']
+    cols = ['TAZ', 'county_FIPS', 'state_FIPS', 'FAF', 'NAICS6_make', 'esizecat', 'emp']
     consumers = est[cols].copy()
     consumers.reset_index(inplace=True)  # bus_id index as explicit column
 
@@ -1070,7 +1171,7 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     # Create a flag to make sure at least one est is sampled
     # for each zone and PRODUCED commodity combination
     prng = pipeline.get_rn_generator().get_global_rng()
-    g = ['TAZ', 'FAF4', 'NAICS6_make', 'esizecat']
+    g = ['TAZ', 'FAF', 'NAICS6_make', 'esizecat']
     keeper_ids = \
         consumers[g].groupby(g).agg(lambda x: prng.choice(x.index, size=1)[0]).values
     t0 = print_elapsed_time("keeper_ids", t0, debug=True)
@@ -1121,9 +1222,9 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     io_values = io_values[io_values.cum_pct_pro_val > (1 - base_variables.BASE_PROVALTHRESHOLD)]
 
     # - Calcuate value per employee required (US domestic employment) for each NAICS6_make code
-    # FIXME - use FAF4 filters to filter domestic ests
+    # FIXME - use FAF filters to filter domestic ests
     domestic_emp_counts_by_naics = \
-        est[(~est.state_FIPS.isnull())][['NAICS6_make', 'emp']]. \
+        est[(~est.state_FIPS.isnull()) & (est.FAF < 600)][['NAICS6_make', 'emp']]. \
         groupby('NAICS6_make')['emp'].sum()
 
     # - drop io_values rows where there are no domestic producers of the output commodity
@@ -1133,6 +1234,8 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     io_values['emp'] = reindex(domestic_emp_counts_by_naics, io_values.NAICS6_use)
     io_values['val_emp'] = io_values.pro_val / io_values.emp
 
+    io_values.to_csv('io_values_con.csv')
+
     t0 = print_elapsed_time("est_sim_consumers io_values", t0, debug=True)
 
     # there are ests with no inputs (e.g. wholesalers)
@@ -1140,7 +1243,7 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     # output_NAICS = io_values.NAICS6_use.unique()
     # ests_NAICS6_make = ests.NAICS6_make.unique()
     # naics_without_inputs = list(set(ests_NAICS6_make) - set(output_NAICS))
-    # logger.info("%s NAICS_make without input commodities %s" %
+    # logger.info("{:,} NAICS_make without input commodities %s" %
     #             (len(naics_without_inputs), naics_without_inputs))
     # t0 = print_elapsed_time("naics_without_inputs", t0, debug=True)
 
@@ -1161,16 +1264,16 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     # Some ests can potentially make more than one SCTG, simulate exactly one
     #
 
-    is_multi = (NAICS2007io_to_SCTG.proportion < 1)
-    multi_NAICS2007io_to_SCTG = NAICS2007io_to_SCTG[is_multi]
+    is_multi = (NAICS2012io_to_SCTG.proportion < 1)
+    multi_NAICS2012io_to_SCTG = NAICS2012io_to_SCTG[is_multi]
     consumers_NAICS6_make = consumers.NAICS6_make.to_frame(name='NAICS6_make')
-    consumer_is_multi = consumers.NAICS6_make.isin(multi_NAICS2007io_to_SCTG.NAICSio.unique())
+    consumer_is_multi = consumers.NAICS6_make.isin(multi_NAICS2012io_to_SCTG.NAICSio.unique())
     t0 = print_elapsed_time("est_sim_consumers pair_is_multi flag", t0, debug=True)
 
     # - single-SCTG naics
     singletons = pd.merge(
         consumers_NAICS6_make[~consumer_is_multi],
-        NAICS2007io_to_SCTG[~is_multi][['NAICSio', 'SCTG']].set_index('NAICSio'),
+        NAICS2012io_to_SCTG[~is_multi][['NAICSio', 'SCTG']].set_index('NAICSio'),
         left_on="NAICS6_make",
         right_index=True,
         how="left").SCTG
@@ -1183,8 +1286,8 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     sctgs = []
     bus_ids = []
     for naics, naics_ests in multi_sctg_pairs.groupby('NAICS6_make'):
-        # slice the NAICS2007io_to_SCTG rows for this naics
-        naics_sctgs = multi_NAICS2007io_to_SCTG[multi_NAICS2007io_to_SCTG.NAICSio == naics]
+        # slice the NAICS2012io_to_SCTG rows for this naics
+        naics_sctgs = multi_NAICS2012io_to_SCTG[multi_NAICS2012io_to_SCTG.NAICSio == naics]
 
         # choose a random SCTG code for each business with this naics code
         sctgs.append(prng.choice(naics_sctgs.SCTG.values,
@@ -1228,6 +1331,8 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     pairs_NAICS6_use2 = consumers['NAICS6_use'].transform(lambda naics6: naics6.str[:2])
     temp_rand = prng.rand(consumers.shape[0])
 
+    consumers['SCTG'] = consumers['SCTG'].astype('int')
+
     # Pairs[NAICS6_Use2 != "42" & temprand < 0.30 & SCTG < 41,     NAICS6_Make := sctg_whl[SCTG]]
     sctg_whl = np.array([
         0,  # padding
@@ -1254,7 +1359,7 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     # users now have multiple identical inputs on a NAICS6_Make - SCTG basis
     # aggregate (summing over ValEmp) so that NAICS6_MAke - SCTG is unique for each user
 
-    by_cols = ['bus_id', 'NAICS6_make', 'SCTG', 'NAICS6_use', 'TAZ', 'FAF4', 'esizecat']
+    by_cols = ['bus_id', 'NAICS6_make', 'SCTG', 'NAICS6_use', 'TAZ', 'FAF', 'esizecat']
     consumers = consumers.groupby(by_cols)['val_emp'].sum().to_frame(name='val_emp').reset_index()
 
     t0 = print_elapsed_time("est_sim_consumers group and sum", t0, debug=True)
@@ -1265,6 +1370,8 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     consumers['con_val'] = consumers.emp * 1E6 * consumers.val_emp
     consumers['unit_cost'] = reindex(unitcost.unit_cost, consumers.SCTG)
     consumers['purchase_amount_tons'] = consumers.con_val / consumers.unit_cost
+
+    consumers.to_csv('consumers_intermediate.csv')
 
     del consumers['val_emp']
     del est
@@ -1284,12 +1391,15 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     consumers_foreign['purchase_amount_tons'] = consumers_foreign.con_val / (consumers_foreign.
                                                                              unit_cost)
     consumers_foreign = consumers_foreign[consumers.columns].copy()
+
+    io_values.to_csv('io_values_con_for.csv')
+    consumers_foreign.to_csv('consumers_intermediate_for.csv')
     del est_foreign
 
-    # consumers = pd.concat([consumers, consumers_foreign], ignore_index=True)
+    # consumers = pd.concat([consumers, consumers_foreign], ignore_index=True, sort=True)
 
-    consumers.NAICS6_make = consumers.NAICS6_make.astype('category')
-    consumers.NAICS6_use = consumers.NAICS6_use.astype('category')
+    # consumers.NAICS6_make = consumers.NAICS6_make.astype('category')
+    # consumers.NAICS6_use = consumers.NAICS6_use.astype('category')
 
     consumers['cost_weight'] = reindex(est_pref_weights.cost_weight, consumers.SCTG)
     consumers['time_weight'] = reindex(est_pref_weights.time_weight, consumers.SCTG)
@@ -1299,10 +1409,10 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     consumers.NAICS6_make = consumers.NAICS6_make.astype('str')
     consumers.NAICS6_use = consumers.NAICS6_use.astype('str')
     consumers.SCTG = consumers.SCTG.astype(int)
-    consumers.FAF4 = consumers.FAF4.astype(int)
+    consumers.FAF = consumers.FAF.astype(int)
 
-    consumers_foreign.NAICS6_make = consumers_foreign.NAICS6_make.astype('category')
-    consumers_foreign.NAICS6_use = consumers_foreign.NAICS6_use.astype('category')
+    # consumers_foreign.NAICS6_make = consumers_foreign.NAICS6_make.astype('category')
+    # consumers_foreign.NAICS6_use = consumers_foreign.NAICS6_use.astype('category')
 
     consumers_foreign['cost_weight'] = reindex(est_pref_weights.cost_weight, consumers_foreign.SCTG)
     consumers_foreign['time_weight'] = reindex(est_pref_weights.time_weight, consumers_foreign.SCTG)
@@ -1313,7 +1423,7 @@ def est_sim_consumers(est, io_values, NAICS2007io_to_SCTG, unitcost, est_pref_we
     consumers_foreign.NAICS6_make = consumers_foreign.NAICS6_make.astype('str')
     consumers_foreign.NAICS6_use = consumers_foreign.NAICS6_use.astype('str')
     consumers_foreign.SCTG = consumers_foreign.SCTG.astype(int)
-    consumers_foreign.FAF4 = consumers_foreign.FAF4.astype(int)
+    consumers_foreign.FAF = consumers_foreign.FAF.astype(int)
 
     col_map = {'bus_id': 'buyer_id',
                'NAICS6_make': 'input_commodity',
@@ -1370,9 +1480,9 @@ def est_sim_naics_set(producers, consumers):
     """
 
     # Convert producers and consumers to data-frame
-    producers = pd.concat(producers, axis=0)
+    producers = pd.concat(producers, axis=0, sort=True)
     producers.reset_index(inplace=True, drop=True)
-    consumers = pd.concat(consumers, axis=0)
+    consumers = pd.concat(consumers, axis=0, sort=True)
     consumers.reset_index(inplace=True, drop=True)
 
     # - matching consumers and suppliers -- by NAICS codes
@@ -1453,9 +1563,9 @@ def est_sim_summary(output_dir, producers, consumers, ests, est_pref_weights):
     """
 
     # Convert producers and consumers to data-frame
-    producers = pd.concat(producers, axis=0)
+    producers = pd.concat(producers, axis=0, sort=True)
     producers.reset_index(inplace=True, drop=True)
-    consumers = pd.concat(consumers, axis=0)
+    consumers = pd.concat(consumers, axis=0, sort=True)
     consumers.reset_index(inplace=True, drop=True)
 
     est_sum = collections.OrderedDict()
@@ -1541,9 +1651,9 @@ def regress(df, step_name, df_name):
 
 
 def est_firm_extract(est_firms):
-    est_cols = ['pnaics', 'NAICS2012', 'county_FIPS', 'state_FIPS', 'FAF4', 'TAZ', 'n2', 'n4',
+    est_cols = ['pnaics', 'NAICS2012', 'county_FIPS', 'state_FIPS', 'FAF', 'TAZ', 'n2', 'n4',
                 'esizecat', 'emp']
-    firm_cols = ['firm_id', 'naics_firm', 'county_FIPS_firm', 'state_FIPS_firm', 'FAF4_firm',
+    firm_cols = ['firm_id', 'naics_firm', 'county_FIPS_firm', 'state_FIPS_firm', 'FAF_firm',
                  'TAZ_firm', 'n2_firm', 'n4_firm', 'fsizecat']
     est = est_firms.loc[:, est_cols]
     firms = est_firms.loc[:, firm_cols]
@@ -1555,7 +1665,11 @@ def est_synthesis(
         output_dir,
         NAICS2012_to_NAICS2007,
         NAICS2007_to_NAICS2007io,
+        NAICS2017_to_NAICS2012,
+        NAICS2017_to_NAICS2007,
+        NAICS2017_to_NAICS2007io,
         NAICS2012_to_NAICS2007io,
+        NAICS2012_to_NAICS2012io,
         employment_categories,
         firm_employment_categories,
         naics_industry,
@@ -1563,6 +1677,7 @@ def est_synthesis(
         naics_empcat,
         socio_economics_taz,
         NAICS2007io_to_SCTG,
+        NAICS2012io_to_SCTG,
         input_output_values,
         taz_fips,
         taz_faf,
@@ -1579,6 +1694,10 @@ def est_synthesis(
     NAICS2012_to_NAICS2007 = NAICS2012_to_NAICS2007.to_frame()
     NAICS2007_to_NAICS2007io = NAICS2007_to_NAICS2007io.to_frame()
     NAICS2012_to_NAICS2007io = NAICS2012_to_NAICS2007io.to_frame()
+    NAICS2012_to_NAICS2012io = NAICS2012_to_NAICS2012io.to_frame()
+    NAICS2017_to_NAICS2007 = NAICS2017_to_NAICS2007.to_frame()
+    NAICS2017_to_NAICS2012 = NAICS2017_to_NAICS2012.to_frame()
+    NAICS2017_to_NAICS2007io = NAICS2017_to_NAICS2007io.to_frame()
     employment_categories = employment_categories.to_frame()
     firm_employment_categories = firm_employment_categories.to_frame()
     naics_industry = naics_industry.to_frame()
@@ -1586,6 +1705,7 @@ def est_synthesis(
     naics_empcat = naics_empcat.to_frame()
     socio_economics_taz = socio_economics_taz.to_frame()
     NAICS2007io_to_SCTG = NAICS2007io_to_SCTG.to_frame()
+    NAICS2012io_to_SCTG = NAICS2012io_to_SCTG.to_frame()
     input_output_values = input_output_values.to_frame()
     unit_cost = unit_cost.to_frame()
     est_pref_weights = est_pref_weights.to_frame()
@@ -1599,7 +1719,7 @@ def est_synthesis(
 
     # - est_sim_load_ests
     t0 = print_elapsed_time()
-    est = est_sim_load_establishments(NAICS2012_to_NAICS2007)
+    est = est_sim_load_establishments(NAICS2017_to_NAICS2012)
     t0 = print_elapsed_time("est_sim_load_ests", t0, debug=True)
 
     # if REGRESS:
@@ -1607,26 +1727,50 @@ def est_synthesis(
     #     logger.warn("using uncorrected ests.naics codes for regression")
     #     ests.NAICS2012 = ests.pnaics
 
-    logger.info("%s ests" % (est.shape[0],))
+    logger.info("{:,} ests".format(est.shape[0],))
+    logger.info("{:,} ests in US mainland".format(est[est.FAF<600].shape[0],))
+    logger.info("{:,} ests in US territories".format(est[(est.FAF<800) & (est.FAF>599)].shape[0],))
+    logger.info("{:,} foreign ests".format(est[est.FAF>800].shape[0],))
+
+    # - est_update_naics_code
+    t0 = print_elapsed_time()
+    est = est_update_naics_code(est, NAICS2017_to_NAICS2012)
+    t0 = print_elapsed_time("est_update_naics_code", t0, debug=True)
+
+    logger.info("{:,} null NAICS 2012 in ests".format(est.NAICS2012.isnull().sum(),))
+
+    if REGRESS:
+        regress(df=est, step_name='est_update_naics_code', df_name='Ests')
 
     # - est_sim_enumerate
     t0 = print_elapsed_time()
-    est = est_sim_enumerate(est, NAICS2012_to_NAICS2007io, employment_categories,
+    est = est_sim_enumerate(est, NAICS2012_to_NAICS2012io, employment_categories,
                             naics_industry, industry_10_5)
     t0 = print_elapsed_time("est_sim_enumerate", t0, debug=True)
 
-    logger.info("%s null NAICS_make in ests" % (est.NAICS6_make.isnull().sum(),))
+    logger.info("{:,} null NAICS_make in ests".format(est.NAICS6_make.isnull().sum(),))
+    logger.info("{:,} ests".format(est.shape[0],))
+    logger.info("{:,} null NAICS_make in ests in US".format(est[est.FAF<600].NAICS6_make.isnull().sum(),))
+    logger.info("{:,} ests in US mainland".format(est[est.FAF<600].shape[0],))
+    logger.info("{:,} null NAICS_make in ests in US territories".format(est[(est.FAF<800) & (est.FAF>599)].NAICS6_make.isnull().sum(),))
+    logger.info("{:,} ests in US territories".format(est[(est.FAF<800) & (est.FAF>599)].shape[0],))
+    logger.info("{:,} null NAICS_make in Foreign ests".format(est[est.FAF>800].NAICS6_make.isnull().sum(),))
+    logger.info("{:,} foreign ests".format(est[est.FAF>800].shape[0],))
 
     if REGRESS:
         regress(df=est, step_name='est_sim_enumerate', df_name='Ests')
-
+    
     # - est_sim_enumerate_foreign
     t0 = print_elapsed_time()
-    est = est_sim_enumerate_foreign(est, NAICS2012_to_NAICS2007io, NAICS2007io_to_SCTG,
+    est = est_sim_enumerate_foreign(est, NAICS2012_to_NAICS2012io, NAICS2012io_to_SCTG,
                                     employment_categories, naics_industry, industry_10_5,
                                     foreign_prod_values, foreign_cons_values)
     t0 = print_elapsed_time("est_sim_enumerate_foreign", t0, debug=True)
-    logger.info("%s null NAICS_make in ests" % (est.NAICS6_make.isnull().sum(),))
+    logger.info("{:,} null NAICS_make in ests".format(est.NAICS6_make.isnull().sum(),))
+    logger.info("{:,} ests".format(est.shape[0],))
+    logger.info("{:,} ests in US mainland".format(est[est.FAF<600].shape[0],))
+    logger.info("{:,} ests in US territories".format(est[(est.FAF<800) & (est.FAF>599)].shape[0],))
+    logger.info("{:,} foreign ests".format(est[est.FAF>800].shape[0],))
 
     if REGRESS:
         regress(df=est, step_name='est_sim_enumerate_foreign', df_name='Ests')
@@ -1635,6 +1779,10 @@ def est_synthesis(
     t0 = print_elapsed_time()
     est = est_sim_taz_allocation(est, naics_empcat)
     t0 = print_elapsed_time("est_sim_taz_allocation", t0, debug=True)
+    logger.info("{:,} ests".format(est.shape[0],))
+    logger.info("{:,} ests in US mainland".format(est[est.FAF<600].shape[0],))
+    logger.info("{:,} ests in US territories".format(est[(est.FAF<800) & (est.FAF>599)].shape[0],))
+    logger.info("{:,} foreign ests".format(est[est.FAF>800].shape[0],))
 
     if REGRESS:
         regress(df=est, step_name='est_sim_tazallocation', df_name='Ests')
@@ -1651,6 +1799,10 @@ def est_synthesis(
                                   taz_fips,
                                   taz_faf)
     t0 = print_elapsed_time("est_sim_scale_employees", t0, debug=True)
+    logger.info("{:,} ests".format(est.shape[0],))
+    logger.info("{:,} ests in US mainland".format(est[est.FAF<600].shape[0],))
+    logger.info("{:,} ests in US territories".format(est[(est.FAF<800) & (est.FAF>599)].shape[0],))
+    logger.info("{:,} foreign ests".format(est[est.FAF>800].shape[0],))
 
     if REGRESS:
         regress(df=est, step_name='est_sim_scale_employees', df_name='Ests')
@@ -1660,11 +1812,21 @@ def est_synthesis(
 
     # - est_sim_assign_SCTG
     t0 = print_elapsed_time()
-    est = est_sim_assign_SCTG(est, NAICS2007io_to_SCTG)
+    est = est_sim_assign_SCTG(est, NAICS2012io_to_SCTG)
     t0 = print_elapsed_time("est_sim_assign_SCTG", t0, debug=True)
 
-    logger.debug("%s ests with null SCTG" % est.SCTG.isnull().sum())
-    logger.debug("%s ests with null NAICS6_make" % est.NAICS6_make.isnull().sum())
+    logger.debug("{:,} ests with null SCTG".format(est.SCTG.isnull().sum()))
+    logger.debug("{:,} ests with null NAICS6_make".format(est.NAICS6_make.isnull().sum()))
+    logger.debug("{:,} ests with null SCTG in US mainland".format(est[est.FAF<600].SCTG.isnull().sum()))
+    logger.debug("{:,} ests with null NAICS6_make in US mainland".format(est[est.FAF<600].NAICS6_make.isnull().sum()))
+    logger.debug("{:,} ests with null SCTG in US territories".format(est[(est.FAF<800) & (est.FAF>599)].SCTG.isnull().sum()))
+    logger.debug("{:,} ests with null NAICS6_make in US territories".format(est[(est.FAF<800) & (est.FAF>599)].NAICS6_make.isnull().sum()))
+    logger.debug("{:,} ests with null SCTG in Foreign est".format(est[est.FAF>800].SCTG.isnull().sum()))
+    logger.debug("{:,} ests with null NAICS6_make in Foreign est".format(est[est.FAF>800].NAICS6_make.isnull().sum()))
+    logger.info("{:,} ests".format(est.shape[0],))
+    logger.info("{:,} ests in US mainland".format(est[est.FAF<600].shape[0],))
+    logger.info("{:,} ests in US territories".format(est[(est.FAF<800) & (est.FAF>599)].shape[0],))
+    logger.info("{:,} foreign ests".format(est[est.FAF>800].shape[0],))
 
     if REGRESS:
         regress(df=est, step_name='est_sim_sctg', df_name='Ests')
@@ -1677,8 +1839,18 @@ def est_synthesis(
     est = est_sim_types(est)
     t0 = print_elapsed_time("est_sim_types", t0, debug=True)
 
-    logger.info('%s ests, %s producers, %s makers' %
-                (est.shape[0], est.producer.sum(), est.maker.sum()))
+    logger.info('{:,} ests, {:,} producers, {:,} makers'.format(est.shape[0], est.producer.sum(), est.maker.sum()))
+    logger.info('{:,} ests, {:,} producers, {:,} makers in US'.format
+                (est[est.FAF<600].shape[0], 
+                 est[est.FAF<600].producer.sum(), 
+                 est[est.FAF<600].maker.sum()))
+    logger.info('{:,} ests, {:,} producers, {:,} makers in US territories'.format(est[(est.FAF<800) & (est.FAF>599)].shape[0],
+                 est[(est.FAF<800) & (est.FAF>599)].producer.sum(), 
+                 est[(est.FAF<800) & (est.FAF>599)].maker.sum()))
+    logger.info('{:,} ests, {:,} producers, {:,} makers Foreign'.format(est[est.FAF>800].shape[0], 
+                 est[est.FAF>800].producer.sum(), 
+                 est[est.FAF>800].maker.sum()))
+                
 
     if REGRESS:
         regress(df=est, step_name='est_sim_types', df_name='Ests')
@@ -1691,18 +1863,24 @@ def est_synthesis(
     producers, MAX_BUS_ID = est_sim_producers(est, input_output_values, unit_cost)
     t0 = print_elapsed_time("est_sim_producers", t0, debug=True)
 
-    logger.info('%s producers' % (np.sum([df.shape[0] for df in producers.itervalues()]),))
+    logger.info('{:,} producers'.format(np.sum([df.shape[0] for df in producers.itervalues()]),))
+    logger.info('{:,} producers in US'.format(np.sum([df[df.FAF<600].shape[0] for df in producers.itervalues()]),))
+    logger.info('{:,} producers in US territories'.format(np.sum([df[(df.FAF<800) & (df.FAF>599)].shape[0] for df in producers.itervalues()]),))
+    logger.info('{:,} Foreign producers'.format(np.sum([df[df.FAF>800].shape[0] for df in producers.itervalues()]),))
 
     if REGRESS:
         regress(df=producers, step_name='est_sim_producers', df_name='producers')
 
     # - est_sim_consumers
     t0 = print_elapsed_time()
-    consumers = est_sim_consumers(est, input_output_values, NAICS2007io_to_SCTG, unit_cost,
+    consumers = est_sim_consumers(est, input_output_values, NAICS2012io_to_SCTG, unit_cost,
                                   est_pref_weights, MAX_BUS_ID)
     t0 = print_elapsed_time("est_sim_consumers", t0, debug=True)
 
-    logger.info('%s consumers' % (np.sum([df.shape[0] for df in consumers.itervalues()]),))
+    logger.info('{:,} consumers'.format(np.sum([df.shape[0] for df in consumers.itervalues()]),))
+    logger.info('{:,} consumers in US'.format(np.sum([df[df.FAF<600].shape[0] for df in consumers.itervalues()]),))
+    logger.info('{:,} consumers in US territories'.format(np.sum([df[(df.FAF<800) & (df.FAF>599)].shape[0] for df in consumers.itervalues()]),))
+    logger.info('{:,} Foreign consumers'.format(np.sum([df[df.FAF>800].shape[0] for df in consumers.itervalues()]),))
 
     if REGRESS:
         regress(df=consumers, step_name='est_sim_consumers', df_name='consumers')
