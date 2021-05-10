@@ -56,9 +56,8 @@ def est_sim_load_establishments(NAICS2017_to_NAICS2012):
 
     return est
 
-def est_update_naics_code(
-    est,
-    NAICS2017_to_NAICS2012):
+
+def est_update_naics_code(est, NAICS2017_to_NAICS2012):
     """
     For now, just sample NAICS 2012 for one to many NAICS 2017 to NAICS 2012
     """
@@ -70,20 +69,21 @@ def est_update_naics_code(
         NAICS2017_to_NAICS2012.NAICS2017
         )
 
-    est['NAICS2012'] =  reindex(
-        NAICS2017_to_NAICS2012[NAICS2017_to_NAICS2012.Single==1].set_index('NAICS2017')['NAICS2012'],
+    est['NAICS2012'] = reindex(
+        NAICS2017_to_NAICS2012[NAICS2017_to_NAICS2012.Single == 1].
+        set_index('NAICS2017')['NAICS2012'],
         est.NAICS2017
     )
 
-    multi_naics_2017 = NAICS2017_to_NAICS2012[NAICS2017_to_NAICS2012.Single>1].NAICS2017.unique()
-    
+    multi_naics_2017 = NAICS2017_to_NAICS2012[NAICS2017_to_NAICS2012.Single > 1].NAICS2017.unique()
+
     prng = pipeline.get_rn_generator().get_global_rng()
     for naics, naics_ests in est[est.NAICS2017.isin(multi_naics_2017)].groupby('NAICS2017'):
-        naics2012 = NAICS2017_to_NAICS2012[NAICS2017_to_NAICS2012.NAICS2017==naics].NAICS2012
-         # choose a random NAICS 2012 code for each business with this naics 2017 code
+        naics2012 = NAICS2017_to_NAICS2012[NAICS2017_to_NAICS2012.NAICS2017 == naics].NAICS2012
+        # choose a random NAICS 2012 code for each business with this naics 2017 code
         naics2012 = prng.choice(naics2012.values,
-                              size=len(naics_ests),
-                              replace=True)
+                                size=len(naics_ests),
+                                replace=True)
 
         est.loc[naics_ests.index, 'NAICS2012'] = naics2012
 
@@ -91,6 +91,7 @@ def est_update_naics_code(
 
     del est['NAICS2017']
     return est
+
 
 def est_sim_enumerate(
         est,
@@ -169,7 +170,8 @@ def est_sim_enumerate(
 
     if est.industry5.isnull().any():
         unmatched_industry_10 = est[est.industry5.isnull()].n3.unique()
-        logger.error("{:,} unmatched industry_10 codes in industry_10_5" % len(unmatched_industry_10))
+        logger.error("{:,} unmatched industry_10 codes in industry_10_5" %
+                     len(unmatched_industry_10))
         print "\nnon matching industry_10 codes\n", unmatched_industry_10
         est.industry10.fillna('', inplace=True)
 
@@ -335,7 +337,7 @@ def est_sim_enumerate_foreign(est,
         # TODO: are these the right correspondences given the I/O data for the current project?
         KeyMap('NAICS6', 211111, 'SCTG', (16L, 19L), (.45, .55)),
         # Crude Petroleum and Natural Gas Extraction: Crude petroleum; Coal and petroleum products, n.e.c.            # nopep8
-        KeyMap('NAICS6', 324110, 'SCTG', (17L, 18L, 19L), (.50, .25, 0.25)), #(17L, 18L, 19L), (.25, .25, .50)),
+        KeyMap('NAICS6', 324110, 'SCTG', (17L, 18L, 19L), (.50, .25, 0.25)),
         # Petroleum Refineries: Gasoline and aviation turbine fuel; Fuel oils; Coal and petroleum products, n.e.c.    # nopep8
     ]
 
@@ -408,7 +410,8 @@ def est_sim_enumerate_foreign(est,
 
     if ests_foreign.industry5.isnull().any():
         unmatched_industry_10 = ests_foreign[ests_foreign.industry5.isnull()].n3.unique()
-        logger.error("{:,} unmatched industry_10 codes in industry_10_5" % len(unmatched_industry_10))
+        logger.error("{:,} unmatched industry_10 codes in industry_10_5" %
+                     len(unmatched_industry_10))
         print "\nnon matching industry_10 codes\n", unmatched_industry_10
         ests_foreign.industry10.fillna('', inplace=True)
 
@@ -510,7 +513,7 @@ def est_sim_scale_employees(
     """
 
     # Separate out the foreign ests and us territories
-    est_us_terr_foreign = est[est.FAF > 599] 
+    est_us_terr_foreign = est[est.FAF > 599]
     est = est[est.FAF < 600].copy()
 
     # Assign employment based on the proportion of ests obtained by
@@ -541,16 +544,16 @@ def est_sim_scale_employees(
     est.loc[est_emp.index, 'emp'] = est_emp.emp.values
 
     # reformat socio_economics_taz table
-    socio_economics_taz['model_emp_cat'] = reindex(naics_empcat.groupby('lehdn2')['model_emp_cat'].agg(np.unique),
-    socio_economics_taz.n2)
+    socio_economics_taz['model_emp_cat'] = reindex(naics_empcat.groupby('lehdn2')['model_emp_cat'].
+                                                   agg(np.unique),
+                                                   socio_economics_taz.n2)
     socio_economics_taz = socio_economics_taz.pivot_table(
         index='TAZ',
         columns='model_emp_cat',
         values='LEmp',
         aggfunc=sum
     ).fillna(0).astype(int)
-    # socio_economics_taz.columns = reindex(naics_empcat.groupby('lehdn2')['model_emp_cat'].agg(np.unique),
-    # socio_economics_taz.columns)
+
     socio_economics_taz.columns = socio_economics_taz.columns.rename('')
 
     # employment categories that
@@ -702,29 +705,30 @@ def est_sim_scale_employees(
         taz_fips.TAZ
         )
 
-    new_est['state_FIPS'] =  reindex(
-        taz_fips[taz_fips.Single==1].set_index('TAZ')['state_FIPS'],
+    new_est['state_FIPS'] = reindex(
+        taz_fips[taz_fips.Single == 1].set_index('TAZ')['state_FIPS'],
         new_est.TAZ
     )
-    new_est['county_FIPS'] =  reindex(
-        taz_fips[taz_fips.Single==1].set_index('TAZ')['county_FIPS'],
+    new_est['county_FIPS'] = reindex(
+        taz_fips[taz_fips.Single == 1].set_index('TAZ')['county_FIPS'],
         new_est.TAZ
     )
 
     new_est = new_est.reset_index(drop=True)
 
-    multi_cnty_taz = taz_fips[taz_fips.Single>1].TAZ.unique()
-    
+    multi_cnty_taz = taz_fips[taz_fips.Single > 1].TAZ.unique()
+
     prng = pipeline.get_rn_generator().get_global_rng()
     for taz, taz_est in new_est[new_est.TAZ.isin(multi_cnty_taz)].groupby('TAZ'):
-        cnty_fips = taz_fips[taz_fips.TAZ==taz].county_FIPS
-        state_fips = taz_fips[taz_fips.TAZ==taz].state_FIPS
-        fips_codes = [[state_fip, cnty_fip] for state_fip, cnty_fip in zip(state_fips.values, cnty_fips.values)]
-        fips_codes = pd.DataFrame(fips_codes, columns = ['state_FIPS', 'county_FIPS'])
+        cnty_fips = taz_fips[taz_fips.TAZ == taz].county_FIPS
+        state_fips = taz_fips[taz_fips.TAZ == taz].state_FIPS
+        fips_codes = [[state_fip, cnty_fip] for state_fip, cnty_fip in
+                      zip(state_fips.values, cnty_fips.values)]
+        fips_codes = pd.DataFrame(fips_codes, columns=['state_FIPS', 'county_FIPS'])
         # choose a random State|County code for each business with this TAZ
         fips_index = prng.choice(range(len(fips_codes)),
-                                size=len(taz_est),
-                                replace=True)
+                                 size=len(taz_est),
+                                 replace=True)
         fips_codes = fips_codes.iloc[fips_index]
         fips_codes.index = taz_est.index
         new_est.loc[taz_est.index, ['state_FIPS', 'county_FIPS']] = fips_codes
@@ -760,7 +764,9 @@ def est_sim_scale_employees(
         n_created = (new_est.model_emp_cat == emp_cat).sum()
 
         if n_needed != n_created:
-            logger.warn("model_emp_cat {} needed {:,}, created {:,}".format(emp_cat, n_needed, n_created))
+            logger.warn("model_emp_cat {} needed {:,}, created {:,}".format(emp_cat,
+                                                                            n_needed,
+                                                                            n_created))
 
     # Combine the original est and the new est
     est = pd.concat([est, new_est], sort=True)
@@ -806,18 +812,18 @@ def est_sim_scale_employees(
     # Recode employee counts into categories
     # US Territories
     est_emp = est[(est.FAF > 599) & (est.FAF < 800)].groupby(['esizecat', 'low_emp', 'emp_range'],
-    group_keys=False) \
+                                                             group_keys=False) \
         .apply(lambda x: {'emp': est_emp_generator(x.low_emp.unique(),
-        x.emp_range.unique(),
-        hyman_interpol,
-        x.shape[0]),
-        'bus_id': x.index.tolist()})
+               x.emp_range.unique(),
+               hyman_interpol,
+               x.shape[0]),
+               'bus_id': x.index.tolist()})
     est_emp = pd.concat([pd.DataFrame.from_dict(x) for x in est_emp.to_frame('est_emp').
                         reset_index().est_emp.tolist()],
                         axis=0, sort=True)
     est_emp.set_index('bus_id', inplace=True)
     est.loc[est_emp.index, 'emp'] = est_emp.emp.values
-    
+
     # Foreign estalblishments
     est.loc[est.FAF > 800, 'emp'] = \
         est_emp_generator(employment_categories.loc[employment_categories.index.max(),
