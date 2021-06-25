@@ -62,4 +62,4 @@ def write_tables(output_dir):
         logger.info("writing output file %s" % file_name)
         file_path = os.path.join(output_dir, file_name)
         write_index = df.index.name is not None
-        df.to_csv(file_path, index=write_index)
+        df.to_csv(file_path, index=write_index, chunksize=100000L)

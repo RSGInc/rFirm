@@ -2,13 +2,12 @@
 #store: pipeline.h5
 
 firms_file_name: &firms_file_name firms_test.csv
-store: test_pipeline.h5
+pipeline: test_pipeline.h5
 
 #data_dir: sample_data
 
 scenarios_dir: scenarios
 scenario_name: base
-output_dir: scenarios/base/output
 
 # input_pre_processor input_tables
 input_tables:
@@ -30,17 +29,18 @@ input_tables:
     column_map:
       CountyFIPS: county_FIPS
       StateFIPS: state_FIPS
-  taz_faf4:
-    filename: corresp_taz_faf4.csv
-  unitcost:
+  taz_faf:
+    filename: corresp_taz_faf5.csv
+    column_map:
+      FAF5: FAF
+  unit_cost:
     filename: data_unitcost.csv
     column_map:
       Commodity_SCTG: SCTG
       UnitCost: unit_cost
-      #Commodity_SCTG,UnitCost,Tons,Value
     index_col: SCTG
-  firm_pref_weights:
-    filename: data_firm_pref_weights.csv
+  est_pref_weights:
+    filename: data_est_pref_weights.csv
     column_map:
       Commodity_SCTG: SCTG
       CostWeight: cost_weight
@@ -53,6 +53,11 @@ input_tables:
     column_map:
       EstablishmentSize: esizecat
       ID: id
+  firm_employment_categories:
+      filename: FirmEmploymentCategories.csv
+      column_map:
+        FirmSize: fsizecat
+        ID: id
   input_output_values:
     filename: InputOutputValues.csv
     column_map:
@@ -67,73 +72,104 @@ input_tables:
     # no index col as there are dupes in both columns
     column_map:
       Proportion: proportion
+  NAICS2012_to_NAICS2012io:
+    filename: NAICS2012_to_NAICS2012io.csv
+    column_map:
+      NAICSIO: NAICSio
+      NAICS2012: NAICS
+      Proportion: proportion
+  NAICS2017_to_NAICS2007io:
+    filename: NAICS2017_to_NAICS2007io.csv
+    # no index col as there are dupes in both columns
+    column_map:
+      Proportion: proportion
   NAICS2012_to_NAICS2007:
     filename: NAICS2012_to_NAICS2007.csv
+    # no index col as there are dupes in both columns
+  NAICS2017_to_NAICS2007:
+    filename: NAICS2017_to_NAICS2007.csv
+    # no index col as there are dupes in both columns
+  NAICS2017_to_NAICS2012:
+    filename: NAICS2017_to_NAICS2012.csv
     # no index col as there are dupes in both columns
   NAICS2007io_to_SCTG:
     filename: NAICS2007io_to_SCTG.csv
     column_map:
       Proportion: proportion
+  NAICS2012io_to_SCTG:
+    filename: NAICS2012io_to_SCTG.csv
+    column_map:
+      NAICSIO: NAICSio
+      Proportion: proportion
+  foreign_prod_values:
+    filename: data_foreign_prod.csv
+    column_map:
+      Commodity_NAICS6: NAICS6
+      USImpVal: pro_val
+      FAFZONE: FAF
+  foreign_cons_values:
+    filename: data_foreign_cons.csv
+    column_map:
+      Commodity_NAICS6: NAICS6
+      USExpVal: con_val
+      FAFZONE: FAF
 
 scenario_input_tables:
   socio_economics_taz:
     filename: lehdtazm.csv
-    index_col: TAZ
 
-firm_synthesis_tables:
-  firms_establishments:
+est_synthesis_tables:
+  ests_establishments:
     filename: *firms_file_name
     column_map:
       estid: bus_id
-      TAZ1: TAZ
+      naics: naics
+      n2: n2
+      n4: n4
+      TAZ: TAZ
       CountyFIPS: county_FIPS
       StateFIPS: state_FIPS
-      #naics: NAICS2012
+      FAF4: FAF4
     index_col: bus_id
-
-#  # 2014 SUSB Annual Data Tables by Establishment Industry
-#  SUSB_firms:
-#    filename: SUSB_Firms.csv
-#    column_map:
-#      naics: NAICS
-#    index_col: NAICS
-
-
 
 
 run_list:
   steps:
     - input_pre_processor
-#    - firm_synthesis_load_firms
-#    - firm_synthesis_enumerate
-#    - firm_synthesis_scale_employees
-#    - firm_synthesis_simulate_production_commodities
-#    - firm_synthesis_types
-#    - firm_synthesis_iopairs
-#    - firm_synthesis_producers
-#    - firm_synthesis_consumers
-#    - firm_synthesis_naics_set
-#    - firm_synthesis_summary
-    - firm_synthesis
+    - est_synthesis
     - write_data_dictionary
     - write_tables
 
-  #resume_after: firm_synthesis_consumers
-
+#resume_after: write_data_dictionary
 
 
 # output_tables can specify either a list of output tables to include or to skip
 # if neither is specified, then all checkpointed tables will be written
 #
-#output_tables:
-#  action: skip
-#  tables:
-#    - cbp
-#
 output_tables:
-  action: include
+  action: skip
   tables:
-    - matches_naics
-    - naics_set
+    - naics_industry
+    - industry_10_5
+    - naics_empcat
+    - taz_fips
+    - taz_faf4
+    - unit_cost
+    - est_pref_weights
+    - employment_categories
+    - firm_employment_categories
+    - input_output_values
+    - NAICS2007_to_NAICS2007io
+    - NAICS2012_to_NAICS2007io
+    - NAICS2012_to_NAICS2007
+    - NAICS2007io_to_SCTG
+    - foreign_prod_values
+    - foreign_cons_values
+
+#output_tables:
+#  action: include
+#  tables:
+#    - matches_naics
+#    - naics_set
 
 
