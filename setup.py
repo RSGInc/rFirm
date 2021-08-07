@@ -8,7 +8,7 @@ with open('README.rst') as file:
 
 setup(
     name='rFirm',
-    version='0.1.dev3',
+    version='0.1.dev5',
     description='firm synthesis',
     author='contributing authors',
     author_email='jeff.doyle@rsginc.com',
